@@ -340,6 +340,9 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         .env("ANTHROPIC_SMALL_FAST_MODEL", &plan.small_model)
         .env("CLAUDE_CODE_SUBAGENT_MODEL", &plan.model)
         .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+        // claude.ai connectors need claude.ai auth, which the bridge token replaces; turning
+        // them off also removes Claude Code's warning about it.
+        .env("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
         // The plan route rejects Responses tool_search.
         .env("ENABLE_TOOL_SEARCH", "false")
         .env(

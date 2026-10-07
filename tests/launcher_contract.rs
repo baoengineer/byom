@@ -65,6 +65,7 @@ async fn launcher_process_contract() {
     fs::write(&fake, r##"#!/bin/sh
 printf 'arg=<%s>\n' "$@"
 printf 'bedrock=%s\nvertex=%s\nfoundry=%s\nopenai=%s\neditor=%s\npath=%s\n' "${CLAUDE_CODE_USE_BEDROCK-unset}" "${CLAUDE_CODE_USE_VERTEX-unset}" "${CLAUDE_CODE_USE_FOUNDRY-unset}" "${OPENAI_API_KEY-unset}" "$EDITOR" "$PATH"
+printf 'connectors=%s\n' "$ENABLE_CLAUDEAI_MCP_SERVERS"
 printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\napi=%s\n' "$ANTHROPIC_BASE_URL" "$ANTHROPIC_AUTH_TOKEN" "$ANTHROPIC_MODEL" "$ANTHROPIC_DEFAULT_OPUS_MODEL" "$ANTHROPIC_DEFAULT_SONNET_MODEL" "$ANTHROPIC_DEFAULT_HAIKU_MODEL" "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" "${ANTHROPIC_API_KEY-unset}"
 "##).unwrap();
     fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
@@ -190,6 +191,7 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
             format!("sonnet={model}"),
             format!("haiku={model}"),
             "traffic=1".into(),
+            "connectors=false".into(),
             "api=unset".into(),
             "bedrock=unset".into(),
             "vertex=unset".into(),
