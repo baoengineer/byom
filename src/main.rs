@@ -17,6 +17,8 @@ enum Command {
     },
     /// List models available to the signed-in ChatGPT account.
     Models,
+    /// Choose models and settings interactively.
+    Config,
     /// Show local ChatGPT authentication status without a network request.
     AuthStatus,
     /// Launch Claude Code with a locally configured provider route.
@@ -48,6 +50,10 @@ async fn main() -> Result<()> {
             byoclaude::auth::login().await
         }
         Command::Models => byoclaude::catalog::print().await,
+        Command::Config => {
+            let handle = tokio::runtime::Handle::current();
+            tokio::task::spawn_blocking(move || byoclaude::settings::run(handle)).await?
+        }
         Command::AuthStatus => byoclaude::auth::status(),
         Command::Run { model, args } => byoclaude::launch::run(model, args).await,
         Command::Status => byoclaude::launch::status().await,

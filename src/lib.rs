@@ -5,5 +5,6 @@ pub mod config;
 pub mod launch;
 pub mod request;
 pub mod response;
+pub mod settings;
 pub mod sse;
 pub mod upstream;
