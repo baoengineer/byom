@@ -187,6 +187,101 @@ impl Config {
     }
 }
 
+/// Read a setting by dotted path, such as `aliases.haiku` or `providers.zai.models`.
+/// Split a dotted setting path; `fallbacks.<model ID>` keeps the model ID whole.
+fn key_parts(key: &str) -> Vec<&str> {
+    match key.strip_prefix("fallbacks.") {
+        Some(model) => vec!["fallbacks", model],
+        None => key.split('.').filter(|p| !p.is_empty()).collect(),
+    }
+}
+
+pub fn cli_get(key: &str) -> Result<()> {
+    let value = serde_json::to_value(load()?)?;
+    let found = key_parts(key)
+        .into_iter()
+        .try_fold(&value, |v, part| v.get(part));
+    match found {
+        Some(serde_json::Value::String(s)) => println!("{s}"),
+        Some(other) => println!("{}", serde_json::to_string_pretty(other)?),
+        None => bail!("no setting {key:?}"),
+    }
+    Ok(())
+}
+
+/// Parse a command-line value for a setting: booleans and numbers where the schema expects
+/// them, comma-separated lists for list settings, strings otherwise.
+fn parse_value(key: &str, value: &str) -> serde_json::Value {
+    use serde_json::Value;
+    let leaf = key.rsplit('.').next().unwrap_or(key);
+    if leaf == "models" || key.starts_with("fallbacks.") {
+        return Value::Array(
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+                .map(|v| Value::String(v.into()))
+                .collect(),
+        );
+    }
+    match value {
+        "true" => Value::Bool(true),
+        "false" => Value::Bool(false),
+        _ => value
+            .parse::<u64>()
+            .ok()
+            .filter(|_| leaf == "context_tokens")
+            .map(Value::from)
+            .unwrap_or_else(|| Value::String(value.into())),
+    }
+}
+
+/// Set (or with `None`, remove) a setting, validating the result before writing.
+pub fn cli_set(key: &str, value: Option<&str>) -> Result<()> {
+    use serde_json::{Map, Value};
+    let path = state_dir()?.join("config.json");
+    let mut root = match crate::store::read_private(&path)? {
+        Some(bytes) => serde_json::from_slice::<Value>(&bytes).context("parsing config.json")?,
+        None => Value::Object(Map::new()),
+    };
+    let parts = key_parts(key);
+    let Some((last, parents)) = parts.split_last() else {
+        bail!("empty setting name");
+    };
+    let mut node = &mut root;
+    for part in parents {
+        let map = node
+            .as_object_mut()
+            .context("setting path crosses a non-object value")?;
+        node = map
+            .entry(part.to_string())
+            .or_insert_with(|| Value::Object(Map::new()));
+    }
+    let map = node
+        .as_object_mut()
+        .context("setting path crosses a non-object value")?;
+    match value {
+        Some(value) => {
+            map.insert(last.to_string(), parse_value(key, value));
+        }
+        None => {
+            map.remove(*last);
+        }
+    }
+    let config: Config = serde_json::from_value(root.clone())
+        .with_context(|| format!("{key:?} is not a valid setting"))?;
+    config.validate()?;
+    crate::store::write_private(
+        &path,
+        format!("{}\n", serde_json::to_string_pretty(&root)?).as_bytes(),
+    )?;
+    match value {
+        Some(value) => println!("{key} = {value}"),
+        None => println!("{key} reset to default"),
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +365,24 @@ mod tests {
         ] {
             assert!(read_json(json).is_err(), "accepted {json:?}");
         }
+    }
+
+    #[test]
+    fn cli_values_follow_the_schema() {
+        assert_eq!(parse_value("relay", "false"), serde_json::json!(false));
+        assert_eq!(
+            parse_value("context_tokens", "128000"),
+            serde_json::json!(128000)
+        );
+        assert_eq!(parse_value("model", "123"), serde_json::json!("123"));
+        assert_eq!(
+            parse_value("providers.zai.models", "glm-5, glm-4.7"),
+            serde_json::json!(["glm-5", "glm-4.7"])
+        );
+        assert_eq!(
+            parse_value("fallbacks.openai/gpt-6-astra", "openai/gpt-5.6-sol"),
+            serde_json::json!(["openai/gpt-5.6-sol"])
+        );
     }
 
     #[test]

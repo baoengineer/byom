@@ -151,6 +151,12 @@ async fn ready(client: &reqwest::Client, key: &str) -> Option<String> {
     }
 }
 
+/// Version of the running bridge, if one answers with this install's key.
+pub async fn bridge_version() -> Option<String> {
+    let key = key().await.ok()??;
+    ready(&client().ok()?, &key).await
+}
+
 async fn request_shutdown(client: &reqwest::Client, key: &str) -> bool {
     client
         .post(format!("http://127.0.0.1:{}/shutdown", port()))
@@ -279,6 +285,8 @@ pub struct Plan {
     /// Context window to compact against; `None` keeps Claude Code's value.
     pub context_tokens: Option<u64>,
     pub settings: serde_json::Value,
+    /// Non-Claude models offered in /model and as subagents.
+    pub rows: Vec<Row>,
 }
 
 /// A model row offered in `/model` and to subagents.
@@ -288,10 +296,37 @@ pub struct Row {
     pub description: String,
 }
 
-/// Every non-Claude model byoclaude can route: the ChatGPT catalog and configured providers.
+/// Every non-Claude model byoclaude can route: the cached roster, the ChatGPT catalog and
+/// models named in config.
 pub fn rows(config: &crate::config::Config, models: &[crate::catalog::Model]) -> Vec<Row> {
+    let providers = crate::providers::all(config);
+    let provider_name = |id: &str| {
+        providers
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| id.to_owned())
+    };
     let mut rows: Vec<Row> = Vec::new();
-    if crate::providers::find(config, "openai").is_some() {
+    let roster = crate::catalog::roster_cached();
+    for entry in roster.iter().filter(|e| {
+        e.listed && e.provider != crate::providers::CLAUDE_PROVIDER && e.provider != "openai"
+    }) {
+        if !providers.iter().any(|p| p.id == entry.provider) {
+            continue;
+        }
+        let (_, model) = crate::providers::split(&entry.id);
+        rows.push(Row {
+            id: entry.id.clone(),
+            label: if entry.name.is_empty() {
+                model.to_owned()
+            } else {
+                entry.name.clone()
+            },
+            description: provider_name(&entry.provider),
+        });
+    }
+    if providers.iter().any(|p| p.id == "openai") {
         rows.extend(models.iter().filter(|m| m.listed).map(|m| {
             Row {
                 id: crate::providers::canonical(&m.slug),
@@ -306,13 +341,31 @@ pub fn rows(config: &crate::config::Config, models: &[crate::catalog::Model]) ->
             }
         }));
     }
-    for provider in crate::providers::all(config) {
+    for provider in &providers {
+        // Configured models need a usable provider to be offered.
+        let usable = match provider.auth {
+            crate::providers::Auth::ApiKey => crate::providers::api_key(config, provider)
+                .ok()
+                .flatten()
+                .is_some(),
+            crate::providers::Auth::ChatGpt => crate::store::auth::get(&provider.id)
+                .ok()
+                .flatten()
+                .is_some(),
+            _ => true,
+        };
+        if !usable {
+            continue;
+        }
         for model in &provider.models {
-            rows.push(Row {
-                id: format!("{}/{model}", provider.id),
-                label: format!("{model} ({})", provider.name),
-                description: provider.name.clone(),
-            });
+            let id = format!("{}/{model}", provider.id);
+            if !rows.iter().any(|r| r.id == id) {
+                rows.push(Row {
+                    id,
+                    label: model.clone(),
+                    description: provider.name.clone(),
+                });
+            }
         }
     }
     rows
@@ -364,9 +417,16 @@ pub fn plan(
         Some(config.context_tokens)
     } else {
         model.as_deref().filter(|m| !is_claude(m)).map(|m| {
-            let (_, name) = crate::providers::split(m);
-            crate::catalog::find(models, name)
-                .map(|c| c.context_window)
+            let (provider, name) = crate::providers::split(m);
+            let from_roster = crate::catalog::roster_cached()
+                .into_iter()
+                .find(|e| e.id == m)
+                .map(|e| e.context_window);
+            let from_chatgpt = (provider == "openai")
+                .then(|| crate::catalog::find(models, name).map(|c| c.context_window))
+                .flatten();
+            from_roster
+                .or(from_chatgpt)
                 .filter(|w| *w > 0)
                 .unwrap_or(200_000)
         })
@@ -407,12 +467,13 @@ pub fn plan(
         subagent,
         context_tokens,
         settings,
+        rows,
     })
 }
 
 /// Whether Claude Code is signed in (to a Claude plan, an Anthropic key or a token), as
 /// reported by `claude auth status --json` under the launch environment.
-fn claude_signed_in() -> bool {
+pub fn claude_signed_in() -> bool {
     let output = std::process::Command::new("claude")
         .args(["auth", "status", "--json"])
         .env_remove("ANTHROPIC_BASE_URL")
@@ -448,12 +509,11 @@ fn relay_note() {
 pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     let config = crate::config::load()?;
     let relay = config.relay && claude_signed_in();
-    let models = match crate::catalog::load().await {
-        Ok(models) => models,
-        // With the relay, Claude models work without a ChatGPT sign-in.
-        Err(_) if relay => Vec::new(),
-        Err(e) => return Err(e),
-    };
+    // Any usable provider is enough; the plan reports when there is none.
+    let models = crate::catalog::load().await.unwrap_or_default();
+    if !crate::catalog::roster_exists() {
+        crate::catalog::refresh(&config).await;
+    }
     let plan = plan(&config, &models, model, relay)?;
     let key = ensure_bridge(&client()?).await?;
     if relay {
@@ -470,9 +530,12 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         Ok(existing) if !existing.trim().is_empty() => format!("{existing}\n{bridge_header}"),
         _ => bridge_header,
     };
+    let plugin = crate::skill::prepare(&plan.rows)?;
     command
         .arg("--settings")
         .arg(plan.settings.to_string())
+        .arg("--plugin-dir")
+        .arg(&plugin)
         .args(args)
         .env("ANTHROPIC_BASE_URL", format!("http://127.0.0.1:{}", port()))
         .env("ANTHROPIC_CUSTOM_HEADERS", headers)

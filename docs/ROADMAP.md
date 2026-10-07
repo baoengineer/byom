@@ -69,8 +69,8 @@ Boundaries: never imitate another client, never read other tools' credentials, n
 
 - [x] Step 1: `~/.byoclaude` layout, provider-keyed `auth.json`, config schema (roles, relay, providers, fallbacks), migration from `~/.byoclaude-rs`.
 - [x] Step 2: router core, Claude relay, launcher relay env, harness coverage (mixed session verified end to end against mocks).
-- [ ] Step 3: Anthropic-compatible providers and API-key sign-in.
-- [ ] Step 4: CLI verbs (`login`, `logout`, `auth`, `models --json`, `doctor`, `logs`, `config get/set/path`).
-- [ ] Step 5: injected skill and `byoclaude --skill`.
+- [x] Step 3: Anthropic-compatible providers (Z.ai, Kimi, Moonshot, MiniMax, DeepSeek, OpenRouter, Ollama, LM Studio), API-key sign-in, cross-provider roster from provider model lists and models.dev. Verified with real Claude Code against a local Ollama.
+- [x] Step 4: CLI verbs (`login`, `logout`, `auth`, `models --json`, `doctor`, `logs`, `config get/set/unset/path`); bare `byoclaude` runs.
+- [x] Step 5: session plugin with the byoclaude skill and one agent per model (`byoclaude:<model>`), since the Agent tool's `model` field accepts only Claude aliases; `byoclaude --skill`.
 - [ ] Step 6: OpenAI Chat adapter.
 - [ ] Step 7: tabbed TUI, fallbacks, usage.

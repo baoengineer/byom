@@ -60,6 +60,8 @@ pub struct Provider {
     /// Models to offer when the provider has no model list endpoint.
     pub models: Vec<String>,
     pub builtin: bool,
+    /// models.dev provider key used for model metadata and as a fallback model list.
+    pub models_dev: String,
 }
 
 struct Builtin {
@@ -70,6 +72,7 @@ struct Builtin {
     auth: Auth,
     signup: &'static str,
     note: &'static str,
+    models_dev: &'static str,
 }
 
 const BUILTINS: &[Builtin] = &[
@@ -81,6 +84,7 @@ const BUILTINS: &[Builtin] = &[
         auth: Auth::ClaudeCode,
         signup: "https://claude.com/claude-code",
         note: "Uses Claude Code's own sign-in; requests are relayed unmodified.",
+        models_dev: "anthropic",
     },
     Builtin {
         id: "openai",
@@ -90,6 +94,87 @@ const BUILTINS: &[Builtin] = &[
         auth: Auth::ChatGpt,
         signup: "https://chatgpt.com",
         note: "Sign in with ChatGPT; usage counts against your plan and byoclaude's app limit.",
+        models_dev: "openai",
+    },
+    Builtin {
+        id: "zai",
+        name: "Z.ai GLM Coding Plan",
+        protocol: Protocol::Anthropic,
+        base_url: "https://api.z.ai/api/anthropic",
+        auth: Auth::ApiKey,
+        signup: "https://z.ai/subscribe",
+        note: "Coding Plan keys are for supported coding tools such as Claude Code; byoclaude passes Claude Code's client identity through unchanged.",
+        models_dev: "zai-coding-plan",
+    },
+    Builtin {
+        id: "kimi",
+        name: "Kimi For Coding",
+        protocol: Protocol::Anthropic,
+        base_url: "https://api.kimi.com/coding",
+        auth: Auth::ApiKey,
+        signup: "https://www.kimi.com/code",
+        note: "Kimi Code membership key; Claude Code is a documented client.",
+        models_dev: "kimi-code-plan-cn",
+    },
+    Builtin {
+        id: "moonshot",
+        name: "Moonshot AI (Kimi API)",
+        protocol: Protocol::Anthropic,
+        base_url: "https://api.moonshot.ai/anthropic",
+        auth: Auth::ApiKey,
+        signup: "https://platform.moonshot.ai",
+        note: "Pay-as-you-go API key.",
+        models_dev: "moonshotai",
+    },
+    Builtin {
+        id: "minimax",
+        name: "MiniMax",
+        protocol: Protocol::Anthropic,
+        base_url: "https://api.minimax.io/anthropic",
+        auth: Auth::ApiKey,
+        signup: "https://platform.minimax.io",
+        note: "API key or Token Plan key; the Token Plan is meant for third-party coding tools.",
+        models_dev: "minimax",
+    },
+    Builtin {
+        id: "deepseek",
+        name: "DeepSeek",
+        protocol: Protocol::Anthropic,
+        base_url: "https://api.deepseek.com/anthropic",
+        auth: Auth::ApiKey,
+        signup: "https://platform.deepseek.com",
+        note: "Pay-as-you-go API key.",
+        models_dev: "deepseek",
+    },
+    Builtin {
+        id: "openrouter",
+        name: "OpenRouter",
+        protocol: Protocol::Anthropic,
+        base_url: "https://openrouter.ai/api",
+        auth: Auth::ApiKey,
+        signup: "https://openrouter.ai/keys",
+        note: "Hundreds of models; list the ones you want in providers.openrouter.models.",
+        models_dev: "openrouter",
+    },
+    Builtin {
+        id: "ollama",
+        name: "Ollama (local)",
+        protocol: Protocol::Anthropic,
+        base_url: "http://127.0.0.1:11434",
+        auth: Auth::None,
+        signup: "https://ollama.com",
+        note: "Local models; requires Ollama 0.14 or newer running.",
+        models_dev: "",
+    },
+    Builtin {
+        id: "lmstudio",
+        name: "LM Studio (local)",
+        protocol: Protocol::Anthropic,
+        base_url: "http://127.0.0.1:1234",
+        auth: Auth::None,
+        signup: "https://lmstudio.ai",
+        note: "Local models; requires LM Studio 0.4.1 or newer with the server running.",
+        models_dev: "lmstudio",
     },
 ];
 
@@ -106,6 +191,7 @@ fn from_builtin(b: &Builtin) -> Provider {
         note: b.note.into(),
         models: Vec::new(),
         builtin: true,
+        models_dev: b.models_dev.into(),
     }
 }
 
@@ -163,6 +249,7 @@ pub fn all(config: &Config) -> Vec<Provider> {
             note: String::new(),
             models: Vec::new(),
             builtin: false,
+            models_dev: String::new(),
         };
         providers.push(apply(base, custom));
     }

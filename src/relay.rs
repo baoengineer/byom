@@ -215,6 +215,7 @@ mod tests {
             note: String::new(),
             models: Vec::new(),
             builtin: true,
+            models_dev: String::new(),
         }
     }
 

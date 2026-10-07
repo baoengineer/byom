@@ -1,13 +1,17 @@
+pub mod accounts;
 pub mod auth;
 pub mod bridge;
 pub mod catalog;
 pub mod config;
+pub mod doctor;
 pub mod launch;
 pub mod providers;
 pub mod relay;
 pub mod request;
 pub mod response;
+pub mod roster;
 pub mod settings;
+pub mod skill;
 pub mod sse;
 pub mod store;
 pub mod upstream;

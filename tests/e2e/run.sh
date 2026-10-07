@@ -28,12 +28,13 @@ cat > "$home/auth.json" <<JSON
 JSON
 echo "{\"upstream_base_url\":\"http://127.0.0.1:$mock_port/v1\",\"providers\":{\"anthropic\":{\"base_url\":\"http://127.0.0.1:$anthropic_port\"}}}" > "$home/config.json"
 mkdir -m 700 "$home/cache"
+echo '[]' > "$home/cache/roster.json"
 cat > "$home/cache/models.json" <<JSON
 [{"slug":"mock-main","display_name":"Mock Main","description":"","context_window":272000,"effort_levels":["low","medium","high"],"default_effort":"low","listed":true},
  {"slug":"mock-luna","display_name":"Mock Luna","description":"","context_window":272000,"effort_levels":["low"],"default_effort":"low","listed":true}]
 JSON
 
-MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
+MOCK_SUBAGENT=byoclaude:openai-mock-main MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
 mock_pid=$!
 sleep 0.5
 
@@ -50,9 +51,9 @@ BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run mock-main -- \
   < /dev/null > "$work/search.jsonl" 2>> "$work/claude.err" || true
 
 # Relay: Claude Code signed in (a fake token), Claude main model relayed to the mock
-# Anthropic endpoint, and a subagent declared on an OpenAI model.
+# Anthropic endpoint, and the session plugin's agent for an OpenAI model as the subagent.
 CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-mock BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run -- \
-  -p "SUBAGENTTEST: ask the probe." --agents '{"probe":{"description":"Probe agent","prompt":"You are a probe.","model":"openai/mock-main"}}' \
+  -p "SUBAGENTTEST: ask another model." \
   --output-format stream-json --verbose < /dev/null > "$work/relay.jsonl" 2>> "$work/claude.err" || true
 
 python3 - "$work" <<'PY'
@@ -87,6 +88,8 @@ checks.update({
     "relay: subagent ran on OpenAI model": any(m["model"] == "mock-main" and m["session"] != mock[0]["session"] for m in mock),
     "relay: final answer from Claude": relay_final.get("result") == "Claude mock answer." and not relay_final.get("is_error"),
     "relay: logged as relay": any(b.get("transport") == "relay" for b in bridge),
+    "plugin: per-model agent offered to Claude": any(a.get("lists_plugin_agent") for a in relayed),
+    "plugin: byoclaude skill offered to Claude": any(a.get("lists_skill") for a in relayed),
 })
 for name, ok in checks.items():
     print(("PASS " if ok else "FAIL ") + name)

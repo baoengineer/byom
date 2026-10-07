@@ -77,6 +77,8 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
     let catalog = r#"[{"slug":"configured-model","display_name":"","description":"","context_window":0,"effort_levels":[],"default_effort":null,"listed":true}]"#;
     fs::create_dir_all(home.join("cache")).unwrap();
     fs::write(home.join("cache/models.json"), catalog).unwrap();
+    // An existing roster keeps launches from refreshing over the network.
+    fs::write(home.join("cache/roster.json"), "[]").unwrap();
     let upstream = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     upstream.set_nonblocking(true).unwrap();
     fs::write(

@@ -11,7 +11,7 @@
 //!
 //! With a second port it also serves the Anthropic API over HTTP, standing in for
 //! api.anthropic.com behind the Claude relay: `/v1/messages` answers with text (or, for a
-//! SUBAGENTTEST prompt, one Agent call to the `probe` subagent), `count_tokens` returns a
+//! SUBAGENTTEST prompt, one Agent call to the subagent named by `MOCK_SUBAGENT`, default `probe`), `count_tokens` returns a
 //! count, and any other path returns `{}`. Each request is logged to `MOCK_ANTHROPIC_LOG`.
 //!
 //! Usage: cargo run --example mock_openai -- <port> [anthropic-port]
@@ -166,6 +166,8 @@ async fn anthropic(port: u16, log: String, issued: Arc<Mutex<HashSet<&'static st
                 "auth_prefix": auth.trim_start_matches("Bearer ").chars().take(10).collect::<String>(),
                 "bridge_key_forwarded": headers.contains_key("x-byoclaude-key"),
                 "user_agent": header("user-agent"),
+                "lists_plugin_agent": body.windows(19).any(|w| w == b"byoclaude:openai-mo"),
+                "lists_skill": String::from_utf8_lossy(&body).contains("byoclaude:byoclaude"),
             });
             if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
                 let _ = writeln!(file, "{record}");
@@ -184,7 +186,8 @@ async fn anthropic(port: u16, log: String, issued: Arc<Mutex<HashSet<&'static st
                 && issued.lock().unwrap().insert("agent");
             let blocks = if call {
                 vec![json!({"type": "tool_use", "id": "toolu_mock1", "name": "Agent",
-                    "input": {"subagent_type": "probe", "description": "Probe", "prompt": "Answer briefly."}})]
+                    "input": {"subagent_type": std::env::var("MOCK_SUBAGENT").unwrap_or_else(|_| "probe".into()),
+                        "description": "Probe", "prompt": "Answer briefly."}})]
             } else {
                 vec![json!({"type": "text", "text": "Claude mock answer."})]
             };
