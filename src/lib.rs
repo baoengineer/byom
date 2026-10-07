@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod bridge;
 pub mod catalog;
 pub mod config;
 pub mod request;
