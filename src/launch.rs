@@ -298,7 +298,11 @@ pub struct Row {
 
 /// Every non-Claude model byoclaude can route: the cached roster, the ChatGPT catalog and
 /// models named in config.
-pub fn rows(config: &crate::config::Config, models: &[crate::catalog::Model]) -> Vec<Row> {
+pub fn rows(
+    config: &crate::config::Config,
+    models: &[crate::catalog::Model],
+    roster: &[crate::catalog::Entry],
+) -> Vec<Row> {
     let providers = crate::providers::all(config);
     let provider_name = |id: &str| {
         providers
@@ -308,7 +312,6 @@ pub fn rows(config: &crate::config::Config, models: &[crate::catalog::Model]) ->
             .unwrap_or_else(|| id.to_owned())
     };
     let mut rows: Vec<Row> = Vec::new();
-    let roster = crate::catalog::roster_cached();
     for entry in roster.iter().filter(|e| {
         e.listed && e.provider != crate::providers::CLAUDE_PROVIDER && e.provider != "openai"
     }) {
@@ -374,11 +377,12 @@ pub fn rows(config: &crate::config::Config, models: &[crate::catalog::Model]) ->
 pub fn plan(
     config: &crate::config::Config,
     models: &[crate::catalog::Model],
+    roster: &[crate::catalog::Entry],
     requested: Option<String>,
     relay: bool,
 ) -> Result<Plan> {
     use crate::providers::{canonical, is_claude};
-    let mut rows = rows(config, models);
+    let mut rows = rows(config, models, roster);
     let pick = |value: &str| (!value.trim().is_empty()).then(|| canonical(value.trim()));
     let first = rows.first().map(|r| r.id.clone());
     let model = requested
@@ -418,10 +422,7 @@ pub fn plan(
     } else {
         model.as_deref().filter(|m| !is_claude(m)).map(|m| {
             let (provider, name) = crate::providers::split(m);
-            let from_roster = crate::catalog::roster_cached()
-                .into_iter()
-                .find(|e| e.id == m)
-                .map(|e| e.context_window);
+            let from_roster = roster.iter().find(|e| e.id == m).map(|e| e.context_window);
             let from_chatgpt = (provider == "openai")
                 .then(|| crate::catalog::find(models, name).map(|c| c.context_window))
                 .flatten();
@@ -514,7 +515,13 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     if !crate::catalog::roster_exists() {
         crate::catalog::refresh(&config).await;
     }
-    let plan = plan(&config, &models, model, relay)?;
+    let plan = plan(
+        &config,
+        &models,
+        &crate::catalog::roster_cached(),
+        model,
+        relay,
+    )?;
     let key = ensure_bridge(&client()?).await?;
     if relay {
         relay_note();
@@ -642,7 +649,7 @@ mod tests {
             model("hidden", false),
             model("gpt-luna", true),
         ];
-        let plan = plan(&crate::config::Config::default(), &models, None, false).unwrap();
+        let plan = plan(&crate::config::Config::default(), &models, &[], None, false).unwrap();
         assert_eq!(plan.model.as_deref(), Some("openai/big"));
         assert_eq!(plan.background.as_deref(), Some("openai/gpt-luna"));
         assert_eq!(plan.opus.as_deref(), Some("openai/big"));
@@ -652,29 +659,30 @@ mod tests {
         assert_eq!(rows[0]["model"], "openai/big");
         assert_eq!(rows[0]["behavesAs"], "claude-opus-5-5");
         assert_eq!(plan.settings["modelPicker"]["replaceBuiltInOptions"], true);
-        assert!(super::plan(&crate::config::Config::default(), &[], None, false).is_err());
+        assert!(super::plan(&crate::config::Config::default(), &[], &[], None, false).is_err());
         let claude = crate::config::Config {
             model: "claude-opus-5-5".into(),
             ..Default::default()
         };
-        assert!(super::plan(&claude, &models, None, false).is_err());
+        assert!(super::plan(&claude, &models, &[], None, false).is_err());
     }
 
     #[test]
     fn plan_with_relay_keeps_claude_defaults() {
         let models = [model("big", true), model("gpt-luna", true)];
-        let plan = plan(&crate::config::Config::default(), &models, None, true).unwrap();
+        let plan = plan(&crate::config::Config::default(), &models, &[], None, true).unwrap();
         assert_eq!(plan.model, None);
         assert_eq!(plan.background, None);
         assert_eq!(plan.opus, None);
         assert_eq!(plan.context_tokens, None);
         assert_eq!(plan.settings["modelPicker"]["replaceBuiltInOptions"], false);
         // No ChatGPT sign-in: Claude alone still works.
-        assert!(super::plan(&crate::config::Config::default(), &[], None, true).is_ok());
+        assert!(super::plan(&crate::config::Config::default(), &[], &[], None, true).is_ok());
         // A GPT main model gets its window; Claude aliases stay native.
         let plan = super::plan(
             &crate::config::Config::default(),
             &models,
+            &[],
             Some("gpt-luna".into()),
             true,
         )
@@ -697,6 +705,7 @@ mod tests {
         let plan = plan(
             &config,
             &[model("big", true)],
+            &[],
             Some("requested".into()),
             true,
         )

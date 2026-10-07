@@ -109,7 +109,7 @@ async fn main() -> Result<()> {
         } => byoclaude::roster::print(json, provider, refresh, all).await,
         Command::Config { action: None } => {
             let handle = tokio::runtime::Handle::current();
-            tokio::task::spawn_blocking(move || byoclaude::settings::run(handle)).await?
+            tokio::task::spawn_blocking(move || byoclaude::tui::run(handle)).await?
         }
         Command::Config {
             action: Some(action),

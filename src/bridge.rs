@@ -367,8 +367,57 @@ impl Bridge {
                 } else {
                     format!("HTTP {status}")
                 };
-                self.write_log(&log, Some(&route), &outcome, &Value::Null);
-                response
+                let streaming = response
+                    .headers()
+                    .get(header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .is_some_and(|v| v.starts_with("text/event-stream"));
+                if status >= 400 || !streaming {
+                    self.write_log(&log, Some(&route), &outcome, &Value::Null);
+                    return response;
+                }
+                // Read usage from the stream as it passes; log once it ends.
+                let (parts, body) = response.into_parts();
+                let scanner = UsageScanner::default();
+                let path = self.log.clone();
+                let transport = route.transport;
+                let stream = stream::unfold(
+                    Some((body.into_data_stream(), scanner, log, path)),
+                    move |slot| async move {
+                        use futures_util::StreamExt;
+                        let (mut body, mut scanner, log, path) = slot?;
+                        match body.next().await {
+                            Some(Ok(bytes)) => {
+                                scanner.push(&bytes);
+                                Some((
+                                    Ok::<_, axum::Error>(bytes),
+                                    Some((body, scanner, log, path)),
+                                ))
+                            }
+                            Some(Err(e)) => {
+                                append_log(
+                                    path.as_deref(),
+                                    &log,
+                                    transport,
+                                    "stream broke off",
+                                    &scanner.usage(),
+                                );
+                                Some((Err(e), None))
+                            }
+                            None => {
+                                append_log(
+                                    path.as_deref(),
+                                    &log,
+                                    transport,
+                                    "ok",
+                                    &scanner.usage(),
+                                );
+                                None
+                            }
+                        }
+                    },
+                );
+                Response::from_parts(parts, Body::from_stream(stream))
             }
             Err(refusal) => {
                 self.write_log(&log, Some(&route), &refusal.message, &Value::Null);
@@ -924,6 +973,54 @@ impl ChatSource {
     }
 }
 
+/// Collects token usage from an Anthropic SSE stream without keeping its content.
+#[derive(Default)]
+struct UsageScanner {
+    decoder: crate::sse::SseDecoder,
+    input: u64,
+    cached: u64,
+    output: u64,
+    seen: bool,
+}
+
+impl UsageScanner {
+    fn push(&mut self, bytes: &[u8]) {
+        let Ok(events) = self.decoder.push(bytes) else {
+            return;
+        };
+        for event in events {
+            if !event.data.contains("usage") {
+                continue;
+            }
+            let Ok(value) = serde_json::from_str::<Value>(&event.data) else {
+                continue;
+            };
+            let usage = match value["type"].as_str() {
+                Some("message_start") => &value["message"]["usage"],
+                Some("message_delta") => &value["usage"],
+                _ => continue,
+            };
+            self.seen = true;
+            if let Some(n) = usage["input_tokens"].as_u64() {
+                self.input = self.input.max(n);
+            }
+            if let Some(n) = usage["cache_read_input_tokens"].as_u64() {
+                self.cached = self.cached.max(n);
+            }
+            if let Some(n) = usage["output_tokens"].as_u64() {
+                self.output = self.output.max(n);
+            }
+        }
+    }
+
+    fn usage(&self) -> Value {
+        if !self.seen {
+            return Value::Null;
+        }
+        json!({"input_tokens": self.input, "cache_read_input_tokens": self.cached, "output_tokens": self.output})
+    }
+}
+
 /// Append one request line to the bridge log (no content).
 fn append_log(path: Option<&Path>, log: &Log, transport: &str, outcome: &str, usage: &Value) {
     let Some(path) = path else {
@@ -1011,6 +1108,20 @@ fn load_or_create_key(dir: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_scanner_reads_anthropic_stream_usage() {
+        let mut scanner = UsageScanner::default();
+        assert_eq!(scanner.usage(), Value::Null);
+        let stream = "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":12,\"cache_read_input_tokens\":30,\"output_tokens\":1}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"usage\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":42}}\n\n";
+        let (a, b) = stream.split_at(70);
+        scanner.push(a.as_bytes());
+        scanner.push(b.as_bytes());
+        assert_eq!(
+            scanner.usage(),
+            json!({"input_tokens": 12, "cache_read_input_tokens": 30, "output_tokens": 42})
+        );
+    }
 
     #[test]
     fn token_estimate_counts_text_and_images() {

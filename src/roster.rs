@@ -128,6 +128,7 @@ pub fn roster_json(
     let plan = crate::launch::plan(
         config,
         &crate::catalog::cached().unwrap_or_default(),
+        roster,
         None,
         config.relay && claude,
     )
