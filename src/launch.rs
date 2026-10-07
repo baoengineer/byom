@@ -107,6 +107,15 @@ fn sanitize_claude(command: &mut std::process::Command) {
     }
 }
 
+/// With the relay, Claude Code keeps its own Anthropic credentials.
+fn sanitize_relay(command: &mut std::process::Command) {
+    for name in UNUSED_PROVIDER_AUTH.iter().chain(ALTERNATE_ROUTES) {
+        if !name.starts_with("ANTHROPIC_") && !name.starts_with("CLAUDE_CODE_OAUTH") {
+            command.env_remove(name);
+        }
+    }
+}
+
 fn sanitize_bridge(command: &mut Command) {
     for name in UNUSED_PROVIDER_AUTH.iter().chain(ALTERNATE_ROUTES).chain(&[
         "ANTHROPIC_BASE_URL",
@@ -254,106 +263,247 @@ async fn wait_for_bridge(client: &reqwest::Client, child: &mut Child) -> Result<
     }
 }
 
-/// Picker rows and environment for running Claude Code on ChatGPT-plan models.
+/// What a session runs on: model slots, context window and the model picker.
+///
+/// With the relay active, unset slots keep Claude Code's own Claude defaults; without it,
+/// every slot needs a non-Claude model.
 pub struct Plan {
-    pub model: String,
-    pub small_model: String,
-    pub context_tokens: u64,
+    pub relay: bool,
+    /// Main model (`ANTHROPIC_MODEL`); `None` keeps Claude Code's default.
+    pub model: Option<String>,
+    /// Background model for titles and summaries (the haiku slot).
+    pub background: Option<String>,
+    pub opus: Option<String>,
+    pub sonnet: Option<String>,
+    pub subagent: Option<String>,
+    /// Context window to compact against; `None` keeps Claude Code's value.
+    pub context_tokens: Option<u64>,
     pub settings: serde_json::Value,
+}
+
+/// A model row offered in `/model` and to subagents.
+pub struct Row {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+}
+
+/// Every non-Claude model byoclaude can route: the ChatGPT catalog and configured providers.
+pub fn rows(config: &crate::config::Config, models: &[crate::catalog::Model]) -> Vec<Row> {
+    let mut rows: Vec<Row> = Vec::new();
+    if crate::providers::find(config, "openai").is_some() {
+        rows.extend(models.iter().filter(|m| m.listed).map(|m| {
+            Row {
+                id: crate::providers::canonical(&m.slug),
+                label: if m.display_name.is_empty() {
+                    m.slug.clone()
+                } else {
+                    m.display_name.clone()
+                },
+                description: format!("{} (ChatGPT plan)", m.description)
+                    .trim()
+                    .to_owned(),
+            }
+        }));
+    }
+    for provider in crate::providers::all(config) {
+        for model in &provider.models {
+            rows.push(Row {
+                id: format!("{}/{model}", provider.id),
+                label: format!("{model} ({})", provider.name),
+                description: provider.name.clone(),
+            });
+        }
+    }
+    rows
 }
 
 pub fn plan(
     config: &crate::config::Config,
     models: &[crate::catalog::Model],
     requested: Option<String>,
+    relay: bool,
 ) -> Result<Plan> {
-    let listed: Vec<&crate::catalog::Model> = models.iter().filter(|m| m.listed).collect();
+    use crate::providers::{canonical, is_claude};
+    let mut rows = rows(config, models);
+    let pick = |value: &str| (!value.trim().is_empty()).then(|| canonical(value.trim()));
+    let first = rows.first().map(|r| r.id.clone());
     let model = requested
-        .filter(|m| !m.trim().is_empty())
-        .or_else(|| (!config.model.is_empty()).then(|| config.model.clone()))
-        .or_else(|| listed.first().map(|m| m.slug.clone()))
-        .context("no models available; run byoclaude models to check your ChatGPT plan")?;
-    // Background work (titles, summaries) goes to the smallest listed model.
-    let small_model = (!config.background.is_empty())
-        .then(|| config.background.clone())
-        .or_else(|| {
-            listed
-                .iter()
-                .find(|m| m.slug.contains("luna") || m.slug.contains("mini"))
-                .map(|m| m.slug.clone())
-        })
-        .unwrap_or_else(|| model.clone());
-    let context_tokens = if config.context_tokens > 0 {
-        config.context_tokens
-    } else {
-        crate::catalog::find(models, &model)
-            .map(|m| m.context_window)
-            .filter(|w| *w > 0)
-            .unwrap_or(200_000)
+        .as_deref()
+        .and_then(pick)
+        .or_else(|| pick(&config.model));
+    let model = match model {
+        Some(model) => Some(model),
+        None if relay => None,
+        None => Some(first.clone().context(
+            "no models available. Sign in with `byoclaude login`, or sign in to Claude Code to use Claude models",
+        )?),
     };
-    let mut options: Vec<serde_json::Value> = listed
+    if !relay && model.as_deref().is_some_and(is_claude) {
+        bail!(
+            "Claude models need Claude Code signed in to Claude (`claude auth login`) and \"relay\" enabled"
+        );
+    }
+    // Without the relay, Claude's own slots are unusable, so they follow byoclaude's choices.
+    let small = rows
         .iter()
-        .map(|m| {
+        .find(|r| r.id.contains("luna") || r.id.contains("mini"))
+        .map(|r| r.id.clone());
+    let background = pick(&config.background)
+        .or_else(|| pick(&config.aliases.haiku))
+        .or_else(|| {
+            (!relay)
+                .then(|| small.clone().or_else(|| model.clone()))
+                .flatten()
+        });
+    let follow = |alias: &str| pick(alias).or_else(|| (!relay).then(|| model.clone()).flatten());
+    let opus = follow(&config.aliases.opus);
+    let sonnet = follow(&config.aliases.sonnet);
+    let subagent = pick(&config.subagent);
+    let context_tokens = if config.context_tokens > 0 {
+        Some(config.context_tokens)
+    } else {
+        model.as_deref().filter(|m| !is_claude(m)).map(|m| {
+            let (_, name) = crate::providers::split(m);
+            crate::catalog::find(models, name)
+                .map(|c| c.context_window)
+                .filter(|w| *w > 0)
+                .unwrap_or(200_000)
+        })
+    };
+    // Models named in config but missing from any catalog still need a row to be accepted.
+    for id in [&model, &background, &opus, &sonnet, &subagent]
+        .into_iter()
+        .flatten()
+    {
+        if !is_claude(id) && !rows.iter().any(|r| &r.id == id) {
+            rows.push(Row {
+                id: id.clone(),
+                label: id.clone(),
+                description: String::new(),
+            });
+        }
+    }
+    let options: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
             serde_json::json!({
-                "model": m.slug,
-                "label": if m.display_name.is_empty() { &m.slug } else { &m.display_name },
-                "description": format!("{} (ChatGPT plan)", m.description),
+                "model": r.id,
+                "label": r.label,
+                "description": r.description,
                 "behavesAs": config.behaves_as,
             })
         })
         .collect();
-    for slug in [&model, &small_model] {
-        if !options.iter().any(|o| o["model"] == slug.as_str()) {
-            options.push(
-                serde_json::json!({"model": slug, "label": slug, "behavesAs": config.behaves_as}),
-            );
-        }
-    }
-    let settings =
-        serde_json::json!({"modelPicker": {"replaceBuiltInOptions": true, "options": options}});
+    let settings = serde_json::json!({
+        "modelPicker": {"replaceBuiltInOptions": !relay, "options": options}
+    });
     Ok(Plan {
+        relay,
         model,
-        small_model,
+        background,
+        opus,
+        sonnet,
+        subagent,
         context_tokens,
         settings,
     })
 }
 
+/// Whether Claude Code is signed in (to a Claude plan, an Anthropic key or a token), as
+/// reported by `claude auth status --json` under the launch environment.
+fn claude_signed_in() -> bool {
+    let output = std::process::Command::new("claude")
+        .args(["auth", "status", "--json"])
+        .env_remove("ANTHROPIC_BASE_URL")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    let status: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap_or_default();
+    status["loggedIn"] == true
+        && status["authMethod"].as_str().is_some_and(|m| m != "none")
+        && status["apiProvider"]
+            .as_str()
+            .is_none_or(|p| p == "firstParty")
+}
+
+const RELAY_NOTE: &str = "byoclaude: Claude models in this session reach Anthropic through byoclaude's local relay, using Claude Code's own sign-in. Requests and responses pass through unmodified, but Anthropic has not explicitly approved relaying subscription traffic. To keep Claude Code talking to Anthropic directly, run: byoclaude config set relay false";
+
+/// Print the relay note once per state directory.
+fn relay_note() {
+    let Ok(marker) = crate::store::home().map(|h| h.join(".relay-note-shown")) else {
+        return;
+    };
+    if marker.exists() {
+        return;
+    }
+    eprintln!("{RELAY_NOTE}\n");
+    let _ = crate::store::write_private(&marker, b"");
+}
+
 /// Launch Claude Code against the local bridge.
 pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     let config = crate::config::load()?;
-    // Check sign-in before starting anything.
-    let models = crate::catalog::load().await?;
-    let plan = plan(&config, &models, model)?;
-    let token = ensure_bridge(&client()?).await?;
+    let relay = config.relay && claude_signed_in();
+    let models = match crate::catalog::load().await {
+        Ok(models) => models,
+        // With the relay, Claude models work without a ChatGPT sign-in.
+        Err(_) if relay => Vec::new(),
+        Err(e) => return Err(e),
+    };
+    let plan = plan(&config, &models, model, relay)?;
+    let key = ensure_bridge(&client()?).await?;
+    if relay {
+        relay_note();
+    }
     let mut command = std::process::Command::new("claude");
-    sanitize_claude(&mut command);
+    if relay {
+        sanitize_relay(&mut command);
+    } else {
+        sanitize_claude(&mut command);
+    }
+    let bridge_header = format!("{}: {key}", crate::relay::BRIDGE_KEY_HEADER);
+    let headers = match std::env::var("ANTHROPIC_CUSTOM_HEADERS") {
+        Ok(existing) if !existing.trim().is_empty() => format!("{existing}\n{bridge_header}"),
+        _ => bridge_header,
+    };
     command
         .arg("--settings")
         .arg(plan.settings.to_string())
         .args(args)
         .env("ANTHROPIC_BASE_URL", format!("http://127.0.0.1:{}", port()))
-        .env("ANTHROPIC_AUTH_TOKEN", token)
-        .env("ANTHROPIC_MODEL", &plan.model)
-        .env("ANTHROPIC_DEFAULT_OPUS_MODEL", &plan.model)
-        .env("ANTHROPIC_DEFAULT_SONNET_MODEL", &plan.model)
-        .env("ANTHROPIC_DEFAULT_HAIKU_MODEL", &plan.small_model)
-        .env("ANTHROPIC_SMALL_FAST_MODEL", &plan.small_model)
-        .env("CLAUDE_CODE_SUBAGENT_MODEL", &plan.model)
-        .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
-        // claude.ai connectors need claude.ai auth, which the bridge token replaces; turning
-        // them off also removes Claude Code's warning about it.
-        .env("ENABLE_CLAUDEAI_MCP_SERVERS", "false")
-        // The plan route rejects Responses tool_search.
-        .env("ENABLE_TOOL_SEARCH", "false")
-        .env(
-            "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
-            plan.context_tokens.to_string(),
-        )
-        .env(
-            "CLAUDE_CODE_AUTO_COMPACT_WINDOW",
-            plan.context_tokens.to_string(),
-        );
+        .env("ANTHROPIC_CUSTOM_HEADERS", headers)
+        // Tool search defers tool definitions that non-Claude models never receive.
+        .env("ENABLE_TOOL_SEARCH", "false");
+    if !relay {
+        command
+            .env("ANTHROPIC_AUTH_TOKEN", &key)
+            .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+            // claude.ai connectors need claude.ai auth, which the bridge key replaces; turning
+            // them off also removes Claude Code's warning about it.
+            .env("ENABLE_CLAUDEAI_MCP_SERVERS", "false");
+    }
+    let slots = [
+        ("ANTHROPIC_MODEL", &plan.model),
+        ("ANTHROPIC_DEFAULT_OPUS_MODEL", &plan.opus),
+        ("ANTHROPIC_DEFAULT_SONNET_MODEL", &plan.sonnet),
+        ("ANTHROPIC_DEFAULT_HAIKU_MODEL", &plan.background),
+        ("ANTHROPIC_SMALL_FAST_MODEL", &plan.background),
+        ("CLAUDE_CODE_SUBAGENT_MODEL", &plan.subagent),
+    ];
+    for (name, value) in slots {
+        if let Some(value) = value {
+            command.env(name, value);
+        }
+    }
+    if let Some(tokens) = plan.context_tokens {
+        command
+            .env("CLAUDE_CODE_MAX_CONTEXT_TOKENS", tokens.to_string())
+            .env("CLAUDE_CODE_AUTO_COMPACT_WINDOW", tokens.to_string());
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -423,38 +573,82 @@ mod tests {
     }
 
     #[test]
-    fn plan_uses_catalog_defaults_and_picker_rows() {
+    fn plan_without_relay_fills_every_slot() {
         let models = [
             model("big", true),
             model("hidden", false),
             model("gpt-luna", true),
         ];
-        let plan = plan(&crate::config::Config::default(), &models, None).unwrap();
-        assert_eq!(plan.model, "big");
-        assert_eq!(plan.small_model, "gpt-luna");
-        assert_eq!(plan.context_tokens, 272_000);
+        let plan = plan(&crate::config::Config::default(), &models, None, false).unwrap();
+        assert_eq!(plan.model.as_deref(), Some("openai/big"));
+        assert_eq!(plan.background.as_deref(), Some("openai/gpt-luna"));
+        assert_eq!(plan.opus.as_deref(), Some("openai/big"));
+        assert_eq!(plan.context_tokens, Some(272_000));
         let rows = plan.settings["modelPicker"]["options"].as_array().unwrap();
         assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["model"], "openai/big");
         assert_eq!(rows[0]["behavesAs"], "claude-opus-5-5");
         assert_eq!(plan.settings["modelPicker"]["replaceBuiltInOptions"], true);
+        assert!(super::plan(&crate::config::Config::default(), &[], None, false).is_err());
+        let claude = crate::config::Config {
+            model: "claude-opus-5-5".into(),
+            ..Default::default()
+        };
+        assert!(super::plan(&claude, &models, None, false).is_err());
     }
 
     #[test]
-    fn plan_honors_requested_and_configured_models() {
-        let models = [model("big", true)];
-        let config = crate::config::Config {
+    fn plan_with_relay_keeps_claude_defaults() {
+        let models = [model("big", true), model("gpt-luna", true)];
+        let plan = plan(&crate::config::Config::default(), &models, None, true).unwrap();
+        assert_eq!(plan.model, None);
+        assert_eq!(plan.background, None);
+        assert_eq!(plan.opus, None);
+        assert_eq!(plan.context_tokens, None);
+        assert_eq!(plan.settings["modelPicker"]["replaceBuiltInOptions"], false);
+        // No ChatGPT sign-in: Claude alone still works.
+        assert!(super::plan(&crate::config::Config::default(), &[], None, true).is_ok());
+        // A GPT main model gets its window; Claude aliases stay native.
+        let plan = super::plan(
+            &crate::config::Config::default(),
+            &models,
+            Some("gpt-luna".into()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(plan.model.as_deref(), Some("openai/gpt-luna"));
+        assert_eq!(plan.context_tokens, Some(272_000));
+        assert_eq!(plan.sonnet, None);
+    }
+
+    #[test]
+    fn plan_honors_configured_roles_and_unknown_models() {
+        let mut config = crate::config::Config {
             model: "configured".into(),
+            background: "openai/small".into(),
+            subagent: "kimi/kimi-k3".into(),
             context_tokens: 1000,
             ..Default::default()
         };
-        let plan = plan(&config, &models, Some("requested".into())).unwrap();
-        assert_eq!(plan.model, "requested");
-        assert_eq!(plan.small_model, "requested");
-        assert_eq!(plan.context_tokens, 1000);
-        // Models missing from the catalog still get a picker row so Claude Code accepts them.
+        config.aliases.opus = "claude-opus-5-5".into();
+        let plan = plan(
+            &config,
+            &[model("big", true)],
+            Some("requested".into()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(plan.model.as_deref(), Some("openai/requested"));
+        assert_eq!(plan.background.as_deref(), Some("openai/small"));
+        assert_eq!(plan.subagent.as_deref(), Some("kimi/kimi-k3"));
+        assert_eq!(plan.opus.as_deref(), Some("claude-opus-5-5"));
+        assert_eq!(plan.context_tokens, Some(1000));
+        // Models missing from any catalog still get a picker row so Claude Code accepts them.
         let rows = plan.settings["modelPicker"]["options"].as_array().unwrap();
-        assert!(rows.iter().any(|r| r["model"] == "requested"));
-        assert!(super::plan(&crate::config::Config::default(), &[], None).is_err());
+        for id in ["openai/requested", "openai/small", "kimi/kimi-k3"] {
+            assert!(rows.iter().any(|r| r["model"] == id), "{id}");
+        }
+        assert!(!rows.iter().any(|r| r["model"] == "claude-opus-5-5"));
     }
 
     #[test]

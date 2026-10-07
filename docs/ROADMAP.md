@@ -68,7 +68,7 @@ Boundaries: never imitate another client, never read other tools' credentials, n
 ## Status
 
 - [x] Step 1: `~/.byoclaude` layout, provider-keyed `auth.json`, config schema (roles, relay, providers, fallbacks), migration from `~/.byoclaude-rs`.
-- [ ] Step 2: router core, Claude relay, launcher relay env, harness coverage.
+- [x] Step 2: router core, Claude relay, launcher relay env, harness coverage (mixed session verified end to end against mocks).
 - [ ] Step 3: Anthropic-compatible providers and API-key sign-in.
 - [ ] Step 4: CLI verbs (`login`, `logout`, `auth`, `models --json`, `doctor`, `logs`, `config get/set/path`).
 - [ ] Step 5: injected skill and `byoclaude --skill`.

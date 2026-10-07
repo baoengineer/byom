@@ -9,7 +9,12 @@
 //! `MOCK_THINKING`, `MOCK_COMMAND` and `MOCK_ANSWER` replace the scripted reasoning
 //! summary, Bash command and final answer; the README demo uses them.
 //!
-//! Usage: cargo run --example mock_openai -- <port>
+//! With a second port it also serves the Anthropic API over HTTP, standing in for
+//! api.anthropic.com behind the Claude relay: `/v1/messages` answers with text (or, for a
+//! SUBAGENTTEST prompt, one Agent call to the `probe` subagent), `count_tokens` returns a
+//! count, and any other path returns `{}`. Each request is logged to `MOCK_ANTHROPIC_LOG`.
+//!
+//! Usage: cargo run --example mock_openai -- <port> [anthropic-port]
 use std::collections::HashSet;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -29,6 +34,11 @@ async fn main() {
         .await
         .expect("bind mock port");
     let issued = Arc::new(Mutex::new(HashSet::<&'static str>::new()));
+    if let Some(port) = std::env::args().nth(2).and_then(|p| p.parse::<u16>().ok()) {
+        let log =
+            std::env::var("MOCK_ANTHROPIC_LOG").expect("MOCK_ANTHROPIC_LOG must name a log file");
+        tokio::spawn(anthropic(port, log, issued.clone()));
+    }
     let mut connections = 0u32;
     println!("mock listening {port}");
     while let Ok((stream, _)) = listener.accept().await {
@@ -141,4 +151,92 @@ fn call(index: u64, call_id: &str, name: &str, arguments: &str) -> Vec<Value> {
         json!({"type": "response.function_call_arguments.delta", "output_index": index, "delta": arguments}),
         json!({"type": "response.output_item.done", "output_index": index, "item": {"type": "function_call", "id": "f", "call_id": call_id, "name": name, "arguments": arguments}}),
     ]
+}
+
+async fn anthropic(port: u16, log: String, issued: Arc<Mutex<HashSet<&'static str>>>) {
+    use axum::{body::Bytes, http::HeaderMap, response::IntoResponse};
+    let app = axum::Router::new().fallback(move |uri: axum::http::Uri, headers: HeaderMap, body: Bytes| {
+        let (log, issued) = (log.clone(), issued.clone());
+        async move {
+            let request: Value = serde_json::from_slice(&body).unwrap_or_default();
+            let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).unwrap_or("").to_owned();
+            let auth = header("authorization");
+            let record = json!({
+                "path": uri.path(), "model": request["model"],
+                "auth_prefix": auth.trim_start_matches("Bearer ").chars().take(10).collect::<String>(),
+                "bridge_key_forwarded": headers.contains_key("x-byoclaude-key"),
+                "user_agent": header("user-agent"),
+            });
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
+                let _ = writeln!(file, "{record}");
+            }
+            if uri.path().ends_with("/count_tokens") {
+                return axum::Json(json!({"input_tokens": 42})).into_response();
+            }
+            if uri.path() != "/v1/messages" {
+                return axum::Json(json!({})).into_response();
+            }
+            let text = request["messages"].to_string();
+            let tools = request["tools"].to_string();
+            let call = text.contains("SUBAGENTTEST")
+                && tools.contains("\"Agent\"")
+                && !text.contains("tool_result")
+                && issued.lock().unwrap().insert("agent");
+            let blocks = if call {
+                vec![json!({"type": "tool_use", "id": "toolu_mock1", "name": "Agent",
+                    "input": {"subagent_type": "probe", "description": "Probe", "prompt": "Answer briefly."}})]
+            } else {
+                vec![json!({"type": "text", "text": "Claude mock answer."})]
+            };
+            let sse = anthropic_sse(&blocks, if call { "tool_use" } else { "end_turn" });
+            (
+                [("content-type", "text/event-stream"), ("anthropic-ratelimit-unified-status", "allowed")],
+                sse,
+            )
+                .into_response()
+        }
+    });
+    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+        .await
+        .expect("bind anthropic port");
+    axum::serve(listener, app)
+        .await
+        .expect("serve anthropic mock");
+}
+
+fn anthropic_sse(blocks: &[Value], stop: &str) -> String {
+    let mut events = vec![(
+        "message_start",
+        json!({"type": "message_start", "message": {"id": "msg_mock", "type": "message",
+        "role": "assistant", "model": "claude-mock", "content": [], "stop_reason": null, "stop_sequence": null,
+        "usage": {"input_tokens": 10, "output_tokens": 0}}}),
+    )];
+    for (index, block) in blocks.iter().enumerate() {
+        let mut start = block.clone();
+        let delta = if block["type"] == "tool_use" {
+            start["input"] = json!({});
+            json!({"type": "input_json_delta", "partial_json": block["input"].to_string()})
+        } else {
+            start["text"] = json!("");
+            json!({"type": "text_delta", "text": block["text"]})
+        };
+        events.push((
+            "content_block_start",
+            json!({"type": "content_block_start", "index": index, "content_block": start}),
+        ));
+        events.push((
+            "content_block_delta",
+            json!({"type": "content_block_delta", "index": index, "delta": delta}),
+        ));
+        events.push((
+            "content_block_stop",
+            json!({"type": "content_block_stop", "index": index}),
+        ));
+    }
+    events.push(("message_delta", json!({"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": null}, "usage": {"output_tokens": 5}})));
+    events.push(("message_stop", json!({"type": "message_stop"})));
+    events
+        .iter()
+        .map(|(name, data)| format!("event: {name}\ndata: {data}\n\n"))
+        .collect()
 }

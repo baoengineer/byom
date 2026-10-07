@@ -153,7 +153,7 @@ impl App {
 
     /// What the launcher will actually use for the current settings.
     fn resolved(&self) -> Option<crate::launch::Plan> {
-        crate::launch::plan(&self.config, &self.models, None).ok()
+        crate::launch::plan(&self.config, &self.models, None, self.config.relay).ok()
     }
 
     /// Current value as shown in the settings list.
@@ -164,14 +164,16 @@ impl App {
             None => "auto".into(),
         };
         match field {
-            Field::Model if self.config.model.is_empty() => auto(plan.map(|p| p.model)),
+            Field::Model if self.config.model.is_empty() => {
+                auto(plan.map(|p| p.model.unwrap_or_else(|| "Claude Code default".into())))
+            }
             Field::Model => self.config.model.clone(),
             Field::SmallModel if self.config.background.is_empty() => {
-                auto(plan.map(|p| p.small_model))
+                auto(plan.map(|p| p.background.unwrap_or_else(|| "Claude Code default".into())))
             }
             Field::SmallModel => self.config.background.clone(),
             Field::Context if self.config.context_tokens == 0 => {
-                auto(plan.map(|p| k(p.context_tokens)))
+                auto(plan.and_then(|p| p.context_tokens).map(k))
             }
             Field::Context => k(self.config.context_tokens),
             Field::Transport if self.config.transport == "http" => "http (HTTP/SSE only)".into(),
@@ -201,14 +203,19 @@ impl App {
                 None => "First model in your plan".into(),
             }),
             Field::SmallModel => models(match plan {
-                Some(p) => format!("Smallest listed model: {}", p.small_model),
+                Some(p) => format!(
+                    "Smallest listed model: {}",
+                    p.background.unwrap_or_else(|| "Claude Code default".into())
+                ),
                 None => "Smallest listed model".into(),
             }),
             Field::Context => {
-                let catalog =
-                    crate::catalog::find(&self.models, &plan.map(|p| p.model).unwrap_or_default())
-                        .map(|m| m.context_window)
-                        .filter(|w| *w > 0);
+                let catalog = crate::catalog::find(
+                    &self.models,
+                    crate::providers::split(&plan.and_then(|p| p.model).unwrap_or_default()).1,
+                )
+                .map(|m| m.context_window)
+                .filter(|w| *w > 0);
                 let mut choices = vec![Choice {
                     value: None,
                     label: "Auto".into(),
@@ -636,9 +643,15 @@ mod tests {
     #[test]
     fn shows_resolved_defaults() {
         let mut app = App::new(Config::default(), models(), "/tmp/config.json".into());
+        assert!(screen(&mut app).contains("auto → Claude Code default"));
+        let no_relay = Config {
+            relay: false,
+            ..Default::default()
+        };
+        let mut app = App::new(no_relay, models(), "/tmp/config.json".into());
         let text = screen(&mut app);
-        assert!(text.contains("auto → gpt-6-astra"), "{text}");
-        assert!(text.contains("auto → gpt-5.6-luna"));
+        assert!(text.contains("auto → openai/gpt-6-astra"), "{text}");
+        assert!(text.contains("auto → openai/gpt-5.6-luna"));
         assert!(text.contains("auto → 272k"));
         assert!(!text.contains("modified"));
     }

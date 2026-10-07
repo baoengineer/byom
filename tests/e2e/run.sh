@@ -13,6 +13,7 @@ home=$work/home
 mkdir -m 700 "$home"
 mock_port=$((47500 + RANDOM % 400))
 bridge_port=$((mock_port + 1))
+anthropic_port=$((mock_port + 2))
 cleanup() {
   pkill -f "bridge --port $bridge_port" 2>/dev/null || true
   [ -n "${mock_pid:-}" ] && kill "$mock_pid" 2>/dev/null || true
@@ -25,14 +26,14 @@ cat > "$home/auth.json" <<JSON
 {"openai":{"access_token":"mock-access","refresh_token":"mock-refresh","id_token":"x","client_id":"mock-client",
  "subject":"mock","email":null,"scopes":["chatgpt.tokens.use.direct"],"expires_at":$far,"earliest_refresh_at":0}}
 JSON
-echo "{\"upstream_base_url\":\"http://127.0.0.1:$mock_port/v1\"}" > "$home/config.json"
+echo "{\"upstream_base_url\":\"http://127.0.0.1:$mock_port/v1\",\"providers\":{\"anthropic\":{\"base_url\":\"http://127.0.0.1:$anthropic_port\"}}}" > "$home/config.json"
 mkdir -m 700 "$home/cache"
 cat > "$home/cache/models.json" <<JSON
 [{"slug":"mock-main","display_name":"Mock Main","description":"","context_window":272000,"effort_levels":["low","medium","high"],"default_effort":"low","listed":true},
  {"slug":"mock-luna","display_name":"Mock Luna","description":"","context_window":272000,"effort_levels":["low"],"default_effort":"low","listed":true}]
 JSON
 
-MOCK_LOG=$work/mock.log "$mock" "$mock_port" > "$work/mock.out" 2>&1 &
+MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
 mock_pid=$!
 sleep 0.5
 
@@ -48,8 +49,14 @@ BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run mock-main -- \
   -p "SEARCHTEST: look this up." --allowedTools WebSearch --output-format stream-json --verbose \
   < /dev/null > "$work/search.jsonl" 2>> "$work/claude.err" || true
 
+# Relay: Claude Code signed in (a fake token), Claude main model relayed to the mock
+# Anthropic endpoint, and a subagent declared on an OpenAI model.
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-mock BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run -- \
+  -p "SUBAGENTTEST: ask the probe." --agents '{"probe":{"description":"Probe agent","prompt":"You are a probe.","model":"openai/mock-main"}}' \
+  --output-format stream-json --verbose < /dev/null > "$work/relay.jsonl" 2>> "$work/claude.err" || true
+
 python3 - "$work" <<'PY'
-import json, sys
+import json, os, sys
 work = sys.argv[1]
 events = [json.loads(l) for l in open(f"{work}/claude.jsonl") if l.startswith("{")]
 blocks = [b for e in events if e.get("type") == "assistant" for b in e["message"]["content"]]
@@ -69,6 +76,18 @@ checks = {
     "web search reached hosted search": any("web_search" in m.get("hosted", []) for m in mock),
     "web search result returned to model": "mock-source" in open(f"{work}/search.jsonl").read(),
 }
+anthropic = [json.loads(l) for l in open(f"{work}/anthropic.log")] if os.path.exists(f"{work}/anthropic.log") else []
+relayed = [a for a in anthropic if a["path"] == "/v1/messages" and str(a["model"]).startswith("claude")]
+relay_events = [json.loads(l) for l in open(f"{work}/relay.jsonl") if l.startswith("{")]
+relay_final = next((e for e in relay_events if e.get("type") == "result"), {})
+checks.update({
+    "relay: Claude model reached Anthropic": bool(relayed),
+    "relay: Claude Code's own credential forwarded": all(a["auth_prefix"] == "sk-ant-oat" for a in relayed) and bool(relayed),
+    "relay: bridge key not forwarded": not any(a["bridge_key_forwarded"] for a in anthropic),
+    "relay: subagent ran on OpenAI model": any(m["model"] == "mock-main" and m["session"] != mock[0]["session"] for m in mock),
+    "relay: final answer from Claude": relay_final.get("result") == "Claude mock answer." and not relay_final.get("is_error"),
+    "relay: logged as relay": any(b.get("transport") == "relay" for b in bridge),
+})
 for name, ok in checks.items():
     print(("PASS " if ok else "FAIL ") + name)
 print("bridge:", [{k: b.get(k) for k in ("model", "continued", "sent_items", "miss", "outcome")} for b in bridge])

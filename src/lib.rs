@@ -3,6 +3,8 @@ pub mod bridge;
 pub mod catalog;
 pub mod config;
 pub mod launch;
+pub mod providers;
+pub mod relay;
 pub mod request;
 pub mod response;
 pub mod settings;

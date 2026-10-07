@@ -63,7 +63,12 @@ async fn launcher_process_contract() {
     fs::create_dir(&bin).unwrap();
     let fake = bin.join("claude");
     fs::write(&fake, r##"#!/bin/sh
+if [ "$1" = auth ]; then
+  printf '{"loggedIn":%s,"authMethod":"claude.ai","apiProvider":"firstParty"}\n' "${FAKE_CLAUDE_SIGNED_IN:-false}"
+  exit 0
+fi
 printf 'arg=<%s>\n' "$@"
+printf 'headers=%s\n' "$ANTHROPIC_CUSTOM_HEADERS"
 printf 'bedrock=%s\nvertex=%s\nfoundry=%s\nopenai=%s\neditor=%s\npath=%s\n' "${CLAUDE_CODE_USE_BEDROCK-unset}" "${CLAUDE_CODE_USE_VERTEX-unset}" "${CLAUDE_CODE_USE_FOUNDRY-unset}" "${OPENAI_API_KEY-unset}" "$EDITOR" "$PATH"
 printf 'connectors=%s\n' "$ENABLE_CLAUDEAI_MCP_SERVERS"
 printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\napi=%s\n' "$ANTHROPIC_BASE_URL" "$ANTHROPIC_AUTH_TOKEN" "$ANTHROPIC_MODEL" "$ANTHROPIC_DEFAULT_OPUS_MODEL" "$ANTHROPIC_DEFAULT_SONNET_MODEL" "$ANTHROPIC_DEFAULT_HAIKU_MODEL" "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" "${ANTHROPIC_API_KEY-unset}"
@@ -187,10 +192,11 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
         for line in [
             format!("base=http://127.0.0.1:{}", PORT()),
             format!("token={key}"),
-            format!("model={model}"),
-            format!("opus={model}"),
-            format!("sonnet={model}"),
-            format!("haiku={model}"),
+            format!("headers=x-byoclaude-key: {key}"),
+            format!("model=openai/{model}"),
+            format!("opus=openai/{model}"),
+            format!("sonnet=openai/{model}"),
+            format!("haiku=openai/{model}"),
             "traffic=1".into(),
             "connectors=false".into(),
             "api=unset".into(),
@@ -207,6 +213,42 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
             );
         }
     }
+    // Signed in to Claude: Claude Code keeps its credential and Claude defaults.
+    let relay = command(&home, &bin)
+        .args(["run", "--", "--print", "x"])
+        .env("FAKE_CLAUDE_SIGNED_IN", "true")
+        .env("ANTHROPIC_API_KEY", "user-anthropic-key")
+        .env("CLAUDE_CODE_USE_BEDROCK", "1")
+        .output()
+        .unwrap();
+    assert!(relay.status.success(), "{relay:?}");
+    let stdout = String::from_utf8_lossy(&relay.stdout);
+    assert!(
+        stdout.contains(r#""replaceBuiltInOptions":false"#),
+        "{stdout}"
+    );
+    for line in [
+        "token=".to_owned(),
+        format!("headers=x-byoclaude-key: {key}"),
+        // The configured main model applies; unset slots keep Claude's defaults.
+        "model=openai/configured-model".into(),
+        "opus=".into(),
+        "haiku=".into(),
+        "traffic=".into(),
+        "connectors=".into(),
+        "api=user-anthropic-key".into(),
+        "bedrock=unset".into(),
+    ] {
+        assert!(
+            stdout.lines().any(|actual| actual == line),
+            "missing {line:?}: {stdout}"
+        );
+    }
+    assert!(
+        String::from_utf8_lossy(&relay.stderr).contains("relay"),
+        "first relay run explains the relay"
+    );
+
     let wrong_home = temp.path().join("wrong-state");
     fs::create_dir(&wrong_home).unwrap();
     fs::write(wrong_home.join("bridge.key"), "b".repeat(64)).unwrap();

@@ -23,6 +23,7 @@ use futures_util::stream;
 use serde_json::{Value, json};
 
 use crate::catalog::Model;
+use crate::config::Config;
 use crate::response::{Event, ProviderError, Translator};
 use crate::upstream::{Events, Transport, Turn, Upstream};
 
@@ -36,6 +37,12 @@ pub struct Bridge {
     models: RwLock<Vec<Model>>,
     log: Option<PathBuf>,
     shutdown: Arc<tokio::sync::Notify>,
+    /// Config at startup, used when config.json cannot be read later.
+    startup: Config,
+    /// Client for forwarded routes; no overall timeout, as streams can be long.
+    forward: reqwest::Client,
+    /// Resolved API keys by provider, so `!command` keys run once per bridge.
+    keys: std::sync::Mutex<std::collections::HashMap<String, String>>,
 }
 
 pub async fn serve(port: u16) -> Result<()> {
@@ -55,7 +62,10 @@ pub async fn serve(port: u16) -> Result<()> {
     } else {
         Transport::Auto
     };
-    let upstream = Upstream::new(http, &config.upstream_base_url, token, transport);
+    let openai = crate::providers::find(&config, "openai")
+        .map(|p| p.base_url)
+        .unwrap_or_else(|| config.upstream_base_url.clone());
+    let upstream = Upstream::new(http.clone(), &openai, token, transport);
     let bridge = Arc::new(Bridge {
         key,
         active: Arc::new(tokio::sync::Semaphore::new(ACTIVE_REQUEST_LIMIT)),
@@ -63,6 +73,9 @@ pub async fn serve(port: u16) -> Result<()> {
         models: RwLock::new(crate::catalog::cached().unwrap_or_default()),
         log: Some(crate::store::log_path()?),
         shutdown: Arc::new(tokio::sync::Notify::new()),
+        startup: config,
+        forward: http,
+        keys: Default::default(),
     });
     upstream.warm();
     let refresh = bridge.clone();
@@ -86,18 +99,11 @@ pub fn router(state: Arc<Bridge>) -> Router {
         .route("/v1/messages", post(messages))
         .route("/v1/messages/count_tokens", post(count_tokens))
         .route("/v1/models", get(models))
+        .fallback(passthrough)
         .with_state(state)
 }
 
-fn authenticated(headers: &HeaderMap, key: &str) -> bool {
-    let bearer = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-    let api_key = headers.get("x-api-key").and_then(|h| h.to_str().ok());
-    let Some(token) = bearer.or(api_key) else {
-        return false;
-    };
+fn same(token: &str, key: &str) -> bool {
     // Always inspect every byte of a correctly sized token.
     token.len() == key.len()
         && token
@@ -105,6 +111,21 @@ fn authenticated(headers: &HeaderMap, key: &str) -> bool {
             .zip(key.bytes())
             .fold(0u8, |diff, (a, b)| diff | (a ^ b))
             == 0
+}
+
+/// The bridge key arrives in `x-byoclaude-key` (when Claude Code keeps its own credential in
+/// `Authorization`) or as the bearer token or API key.
+fn authenticated(headers: &HeaderMap, key: &str) -> bool {
+    let value = |name: &str| headers.get(name).and_then(|h| h.to_str().ok());
+    let bearer = value("authorization").and_then(|v| v.strip_prefix("Bearer "));
+    [
+        value(crate::relay::BRIDGE_KEY_HEADER),
+        bearer,
+        value("x-api-key"),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|token| same(token, key))
 }
 
 fn error(status: u16, kind: &str, message: &str) -> Response {
@@ -147,7 +168,7 @@ async fn models(State(state): State<Arc<Bridge>>, headers: HeaderMap) -> Respons
     let data: Vec<Value> = models
         .iter()
         .filter(|m| m.listed)
-        .map(|m| json!({"type": "model", "id": m.slug, "display_name": m.display_name, "created_at": "2026-01-01T00:00:00Z"}))
+        .map(|m| json!({"type": "model", "id": crate::providers::canonical(&m.slug), "display_name": m.display_name, "created_at": "2026-01-01T00:00:00Z"}))
         .collect();
     axum::Json(json!({
         "data": data, "has_more": false,
@@ -157,20 +178,49 @@ async fn models(State(state): State<Arc<Bridge>>, headers: HeaderMap) -> Respons
     .into_response()
 }
 
-async fn read_json(request: Request) -> Result<(HeaderMap, Value), Box<Response>> {
-    let headers = request.headers().clone();
-    let bytes = to_bytes(request.into_body(), BODY_LIMIT)
-        .await
-        .map_err(|_| {
-            Box::new(error(
-                413,
-                "request_too_large",
-                "Request body exceeds the bridge limit",
-            ))
-        })?;
-    let value = serde_json::from_slice(&bytes)
-        .map_err(|_| Box::new(error(400, "invalid_request_error", "Invalid JSON request")))?;
-    Ok((headers, value))
+struct Incoming {
+    method: axum::http::Method,
+    path: String,
+    headers: HeaderMap,
+    bytes: Bytes,
+}
+
+async fn read_body(request: Request) -> Result<Incoming, Box<Response>> {
+    let (parts, body) = request.into_parts();
+    let bytes = to_bytes(body, BODY_LIMIT).await.map_err(|_| {
+        Box::new(error(
+            413,
+            "request_too_large",
+            "Request body exceeds the bridge limit",
+        ))
+    })?;
+    Ok(Incoming {
+        method: parts.method,
+        path: parts
+            .uri
+            .path_and_query()
+            .map(|p| p.as_str().to_owned())
+            .unwrap_or_else(|| parts.uri.path().to_owned()),
+        headers: parts.headers,
+        bytes,
+    })
+}
+
+fn parse_json(bytes: &[u8]) -> Result<Value, Box<Response>> {
+    serde_json::from_slice(bytes)
+        .map_err(|_| Box::new(error(400, "invalid_request_error", "Invalid JSON request")))
+}
+
+/// Whether the request carries a credential other than the bridge key (Claude Code's own).
+fn has_claude_credential(headers: &HeaderMap, key: &str) -> bool {
+    let value = |name: &str| headers.get(name).and_then(|h| h.to_str().ok());
+    [
+        value("authorization").map(|v| v.trim_start_matches("Bearer ")),
+        value("x-api-key"),
+    ]
+    .into_iter()
+    .flatten()
+    .any(|token| !same(token, key))
 }
 
 /// Local estimate; the plan route has no token-counting endpoint.
@@ -200,12 +250,25 @@ async fn count_tokens(State(state): State<Arc<Bridge>>, request: Request) -> Res
     if !authenticated(request.headers(), &state.key) {
         return unauthorized();
     }
-    match read_json(request).await {
-        Ok((_, body)) => {
-            axum::Json(json!({"input_tokens": estimate_tokens(&body)})).into_response()
-        }
-        Err(response) => *response,
+    let incoming = match read_body(request).await {
+        Ok(incoming) => incoming,
+        Err(response) => return *response,
+    };
+    let body = match parse_json(&incoming.bytes) {
+        Ok(body) => body,
+        Err(response) => return *response,
+    };
+    let config = state.config();
+    let model = body["model"].as_str().unwrap_or("").to_owned();
+    if let Some((provider, name)) = crate::providers::route(&config, &model)
+        && provider.protocol == crate::providers::Protocol::Anthropic
+        && provider.id == crate::providers::CLAUDE_PROVIDER
+    {
+        return state
+            .forward(&config, &provider, Some(&name), incoming, &model)
+            .await;
     }
+    axum::Json(json!({"input_tokens": estimate_tokens(&body)})).into_response()
 }
 
 struct Log {
@@ -216,6 +279,103 @@ struct Log {
 }
 
 impl Bridge {
+    fn config(&self) -> Config {
+        crate::config::load().unwrap_or_else(|_| self.startup.clone())
+    }
+
+    fn api_key(
+        &self,
+        config: &Config,
+        provider: &crate::providers::Provider,
+    ) -> Result<Option<String>> {
+        if let Some(key) = self.keys.lock().unwrap().get(&provider.id) {
+            return Ok(Some(key.clone()));
+        }
+        let key = crate::providers::api_key(config, provider)?;
+        if let Some(key) = &key {
+            self.keys
+                .lock()
+                .unwrap()
+                .insert(provider.id.clone(), key.clone());
+        }
+        Ok(key)
+    }
+
+    /// Forward an Anthropic-protocol request and stream the answer back unchanged.
+    async fn forward(
+        &self,
+        config: &Config,
+        provider: &crate::providers::Provider,
+        upstream_model: Option<&str>,
+        incoming: Incoming,
+        model: &str,
+    ) -> Response {
+        let log = Log {
+            started: Instant::now(),
+            first_token_ms: None,
+            session: incoming
+                .headers
+                .get("x-claude-code-session-id")
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or("")
+                .to_owned(),
+            model: model.to_owned(),
+        };
+        let route = crate::upstream::Route {
+            transport: if provider.id == crate::providers::CLAUDE_PROVIDER {
+                "relay"
+            } else {
+                "anthropic"
+            },
+            ..Default::default()
+        };
+        let api_key = match self.api_key(config, provider) {
+            Ok(key) => key,
+            Err(e) => {
+                let message = format!("API key for {}: {e:#}", provider.id);
+                self.write_log(&log, Some(&route), &message, &Value::Null);
+                return error(401, "authentication_error", &message);
+            }
+        };
+        let outbound = crate::relay::Outbound {
+            method: incoming.method.clone(),
+            path: &incoming.path,
+            headers: &incoming.headers,
+            body: incoming.bytes.clone(),
+        };
+        let prepared = crate::relay::prepare(
+            provider,
+            upstream_model,
+            api_key.as_deref(),
+            &self.key,
+            &outbound,
+        );
+        let result = match prepared {
+            Ok((url, headers, body)) => {
+                crate::relay::send(&self.forward, incoming.method, &url, headers, body).await
+            }
+            Err(refusal) => Err(refusal),
+        };
+        match result {
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let mut log = log;
+                log.first_token_ms = Some(log.started.elapsed().as_millis());
+                let outcome = if status < 400 {
+                    "ok".to_owned()
+                } else {
+                    format!("HTTP {status}")
+                };
+                self.write_log(&log, Some(&route), &outcome, &Value::Null);
+                response
+            }
+            Err(refusal) => {
+                self.write_log(&log, Some(&route), &refusal.message, &Value::Null);
+                error(refusal.status, refusal.kind, &refusal.message)
+            }
+        }
+    }
+
     fn write_log(
         &self,
         log: &Log,
@@ -258,10 +418,51 @@ async fn messages(State(state): State<Arc<Bridge>>, request: Request) -> Respons
             "Bridge active request limit reached",
         );
     };
-    let (headers, input) = match read_json(request).await {
-        Ok(parts) => parts,
+    let incoming = match read_body(request).await {
+        Ok(incoming) => incoming,
         Err(response) => return *response,
     };
+    let mut input = match parse_json(&incoming.bytes) {
+        Ok(input) => input,
+        Err(response) => return *response,
+    };
+    let config = state.config();
+    let requested = input["model"].as_str().unwrap_or("").to_owned();
+    let Some((provider, upstream_model)) = crate::providers::route(&config, &requested) else {
+        return error(
+            404,
+            "not_found_error",
+            &format!("Unknown model {requested:?}. List models with: byoclaude models"),
+        );
+    };
+    match (provider.protocol, provider.auth) {
+        (crate::providers::Protocol::Anthropic, _) => {
+            return state
+                .forward(
+                    &config,
+                    &provider,
+                    Some(&upstream_model),
+                    incoming,
+                    &requested,
+                )
+                .await;
+        }
+        (crate::providers::Protocol::OpenAiResponses, crate::providers::Auth::ChatGpt) => {
+            input["model"] = Value::String(upstream_model);
+        }
+        (protocol, _) => {
+            return error(
+                501,
+                "api_error",
+                &format!(
+                    "{} uses the {} protocol, which this byoclaude does not support yet",
+                    provider.id,
+                    protocol.as_str()
+                ),
+            );
+        }
+    }
+    let headers = incoming.headers;
     let streaming = input["stream"].as_bool() == Some(true);
     let session = headers
         .get("x-claude-code-session-id")
@@ -388,6 +589,28 @@ async fn pull(
             "OpenAI stream ended before the response completed",
         )),
     }
+}
+
+/// Other Anthropic API paths Claude Code calls while signed in go to Anthropic unchanged.
+async fn passthrough(State(state): State<Arc<Bridge>>, request: Request) -> Response {
+    if !authenticated(request.headers(), &state.key) {
+        return unauthorized();
+    }
+    if !has_claude_credential(request.headers(), &state.key) {
+        return error(404, "not_found_error", "Not found");
+    }
+    let incoming = match read_body(request).await {
+        Ok(incoming) => incoming,
+        Err(response) => return *response,
+    };
+    let config = state.config();
+    let Some(provider) = crate::providers::find(&config, crate::providers::CLAUDE_PROVIDER) else {
+        return error(404, "not_found_error", "Not found");
+    };
+    let label = incoming.path.split('?').next().unwrap_or("").to_owned();
+    state
+        .forward(&config, &provider, None, incoming, &label)
+        .await
 }
 
 fn load_or_create_key(dir: &Path) -> Result<String> {
