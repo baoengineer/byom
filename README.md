@@ -24,7 +24,7 @@ byoclaude is an independent project, not affiliated with or endorsed by Anthropi
 ## Requirements
 
 - macOS or Linux
-- Claude Code 2.1.289 or newer
+- Claude Code (tested with 2.1.292)
 - At least one of: a Claude plan (Claude Code signed in), a ChatGPT Plus or Pro plan, an API key for a supported provider, or a local Ollama or LM Studio server
 
 ## Install

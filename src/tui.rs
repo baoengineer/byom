@@ -1326,14 +1326,19 @@ mod tests {
     }
 
     fn app() -> App {
-        App::new(
-            Config {
-                relay: false,
+        // A key reference that never resolves keeps zai unusable whatever is saved locally.
+        let mut config = Config {
+            relay: false,
+            ..Default::default()
+        };
+        config.providers.insert(
+            "zai".into(),
+            crate::config::ProviderConfig {
+                api_key: "$BYOCLAUDE_TEST_NEVER_SET".into(),
                 ..Default::default()
             },
-            roster(),
-            "~/.byoclaude/config.json".into(),
-        )
+        );
+        App::new(config, roster(), "~/.byoclaude/config.json".into())
     }
 
     #[test]
@@ -1367,10 +1372,8 @@ mod tests {
         assert_eq!(app.config.subagent, "", "zai has no key");
         assert!(app.status.contains("not usable"));
         let saved: Value = serde_json::from_slice(&serialize(&app.config).unwrap()).unwrap();
-        assert_eq!(
-            saved,
-            serde_json::json!({"model": "ollama/qwen3", "background": "ollama/llama", "relay": false})
-        );
+        assert_eq!(saved["model"], "ollama/qwen3");
+        assert_eq!(saved["background"], "ollama/llama");
     }
 
     #[test]

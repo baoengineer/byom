@@ -55,10 +55,11 @@ Boundaries: never imitate another client, never read other tools' credentials, n
 | 15 | Usage | Summed from the bridge log by model, provider and day; cost estimated from models.dev prices and labeled as an API-price equivalent. |
 | 16 | Release | 0.2.0, with automatic migration from 0.1.0. |
 
-## To verify during planning
+## Verified during build
 
-- `claude --plugin-dir` (or `CLAUDE_CODE_PLUGIN_DIRS`) loads a plugin for one session.
-- How the launcher detects whether Claude Code is signed in to a Claude plan.
+- `claude --plugin-dir` loads the session plugin for one session; plugin agents with any model ID work as subagents.
+- `claude auth status --json` reports whether Claude Code is signed in; the launcher uses it to enable the relay.
+- The Agent tool's `model` field accepts only Claude aliases, so the plugin carries one agent per model (plumbing for decision 13, not role agents).
 
 ## Out of scope
 

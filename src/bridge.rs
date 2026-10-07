@@ -628,7 +628,7 @@ impl Bridge {
             "miss": route.and_then(|r| r.miss.clone()),
             "first_token_ms": log.first_token_ms,
             "total_ms": log.started.elapsed().as_millis(),
-            "outcome": outcome,
+            "outcome": short(outcome),
             "usage": usage,
         });
         if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
@@ -1021,6 +1021,11 @@ impl UsageScanner {
     }
 }
 
+/// Error text kept in the log; providers sometimes echo request content in long messages.
+fn short(outcome: &str) -> String {
+    outcome.chars().take(160).collect()
+}
+
 /// Append one request line to the bridge log (no content).
 fn append_log(path: Option<&Path>, log: &Log, transport: &str, outcome: &str, usage: &Value) {
     let Some(path) = path else {
@@ -1033,7 +1038,7 @@ fn append_log(path: Option<&Path>, log: &Log, transport: &str, outcome: &str, us
         "transport": transport,
         "first_token_ms": log.first_token_ms,
         "total_ms": log.started.elapsed().as_millis(),
-        "outcome": outcome,
+        "outcome": short(outcome),
         "usage": usage,
     });
     if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {

@@ -8,7 +8,7 @@ All state lives in `~/.byoclaude` (or `$BYOCLAUDE_HOME`), a directory only you c
 - `bridge.key`: a random 256-bit key Claude Code must present to the local bridge. Mode `0600`.
 - `config.json`: settings. API keys can be referenced as `$ENV_VAR` or `!command` instead of stored.
 - `cache/`, `plugin/`: model catalogs and the generated session plugin.
-- `logs/bridge.log`: per-request metadata (model, route, timing, token counts). No prompt or response content, no credentials.
+- `logs/bridge.log`: per-request metadata (model, route, timing, token counts) and, for failures, the first 160 characters of the provider's error message. No prompts, responses or credentials are logged; a provider's error message could quote part of a request.
 
 ## Network exposure
 
