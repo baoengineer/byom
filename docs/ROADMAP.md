@@ -72,5 +72,5 @@ Boundaries: never imitate another client, never read other tools' credentials, n
 - [x] Step 3: Anthropic-compatible providers (Z.ai, Kimi, Moonshot, MiniMax, DeepSeek, OpenRouter, Ollama, LM Studio), API-key sign-in, cross-provider roster from provider model lists and models.dev. Verified with real Claude Code against a local Ollama.
 - [x] Step 4: CLI verbs (`login`, `logout`, `auth`, `models --json`, `doctor`, `logs`, `config get/set/unset/path`); bare `byoclaude` runs.
 - [x] Step 5: session plugin with the byoclaude skill and one agent per model (`byoclaude:<model>`), since the Agent tool's `model` field accepts only Claude aliases; `byoclaude --skill`.
-- [ ] Step 6: OpenAI Chat adapter.
-- [ ] Step 7: tabbed TUI, fallbacks, usage.
+- [x] Step 6: OpenAI Chat Completions adapter and built-ins (Groq, Mistral, Gemini, Cerebras, Together, xAI); custom `openai-chat` providers. Verified with real Claude Code tool round trips against Ollama on both the Anthropic and Chat protocols. Fallback chains applied before output.
+- [ ] Step 7: tabbed TUI and usage view.

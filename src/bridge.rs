@@ -178,6 +178,7 @@ async fn models(State(state): State<Arc<Bridge>>, headers: HeaderMap) -> Respons
     .into_response()
 }
 
+#[derive(Clone)]
 struct Incoming {
     method: axum::http::Method,
     path: String,
@@ -376,6 +377,186 @@ impl Bridge {
         }
     }
 
+    /// Serve a request from an OpenAI Chat Completions provider.
+    #[allow(clippy::too_many_arguments)]
+    async fn chat(
+        &self,
+        config: &Config,
+        provider: &crate::providers::Provider,
+        upstream_model: &str,
+        requested: &str,
+        input: Value,
+        headers: &HeaderMap,
+        permit: Arc<tokio::sync::OwnedSemaphorePermit>,
+    ) -> Response {
+        let mut log = Log {
+            started: Instant::now(),
+            first_token_ms: None,
+            session: headers
+                .get("x-claude-code-session-id")
+                .and_then(|h| h.to_str().ok())
+                .unwrap_or("")
+                .to_owned(),
+            model: requested.to_owned(),
+        };
+        let route = crate::upstream::Route {
+            transport: "openai-chat",
+            ..Default::default()
+        };
+        let key = match self.api_key(config, provider) {
+            Ok(key) => key,
+            Err(e) => {
+                return error(
+                    401,
+                    "authentication_error",
+                    &format!("API key for {}: {e:#}", provider.id),
+                );
+            }
+        };
+        if provider.auth == crate::providers::Auth::ApiKey && key.is_none() {
+            let message = format!(
+                "No API key for {}. Run: byoclaude login {}",
+                provider.name, provider.id
+            );
+            self.write_log(&log, Some(&route), &message, &Value::Null);
+            return error(401, "authentication_error", &message);
+        }
+        let streaming = input["stream"].as_bool() == Some(true);
+        let thinking = matches!(
+            input["thinking"]["type"].as_str(),
+            Some("enabled" | "adaptive")
+        );
+        // Mistral rejects unknown parameters such as stream_options.
+        let body = crate::chat::translate_request(&input, upstream_model, provider.id != "mistral");
+        let url = format!(
+            "{}/chat/completions",
+            provider.base_url.trim_end_matches('/')
+        );
+        let mut request = self
+            .forward
+            .post(&url)
+            .header("accept", "text/event-stream")
+            .json(&body);
+        if let Some(key) = &key {
+            request = request.bearer_auth(key);
+        }
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(e) => {
+                let message = format!(
+                    "Could not reach {}: {}",
+                    provider.name,
+                    if e.is_connect() {
+                        "connection failed"
+                    } else {
+                        "request failed"
+                    }
+                );
+                self.write_log(&log, Some(&route), &message, &Value::Null);
+                return error(502, "api_error", &message);
+            }
+        };
+        let status = response.status().as_u16();
+        if status >= 400 {
+            let body: Value = response.json().await.unwrap_or(Value::Null);
+            let detail = if body["error"].is_object() {
+                &body["error"]
+            } else {
+                &body
+            };
+            let e = ProviderError::from_openai(
+                detail["code"]
+                    .as_str()
+                    .or(detail["type"].as_str())
+                    .unwrap_or("upstream_error"),
+                detail["message"].as_str().unwrap_or(""),
+                Some(status),
+            );
+            self.write_log(&log, Some(&route), &e.message, &Value::Null);
+            return error(e.status, e.kind, &e.message);
+        }
+        let mut source = ChatSource {
+            body: Box::pin(response.bytes_stream()),
+            decoder: crate::sse::SseDecoder::default(),
+            queue: VecDeque::new(),
+            ended: false,
+        };
+        let mut translator = crate::chat::ChatTranslator::new(requested, thinking);
+        let mut frames = VecDeque::new();
+        while !translator.has_content() && !translator.finished() {
+            match source.pull(&mut translator).await {
+                Ok(out) => frames.extend(out),
+                Err(e) => {
+                    self.write_log(&log, Some(&route), &e.message, &Value::Null);
+                    return error(e.status, e.kind, &e.message);
+                }
+            }
+        }
+        log.first_token_ms = Some(log.started.elapsed().as_millis());
+        if !streaming {
+            while !translator.finished() {
+                if let Err(e) = source.pull(&mut translator).await {
+                    self.write_log(&log, Some(&route), &e.message, &Value::Null);
+                    return error(e.status, e.kind, &e.message);
+                }
+            }
+            self.write_log(&log, Some(&route), "ok", &translator.usage);
+            return axum::Json(translator.message()).into_response();
+        }
+        let log_path = self.log.clone();
+        let output = stream::unfold(
+            Some((source, translator, frames, log, log_path, permit)),
+            |slot| async move {
+                let (mut source, mut translator, mut frames, log, log_path, permit) = slot?;
+                loop {
+                    if let Some(event) = frames.pop_front() {
+                        return Some((
+                            Ok::<_, Infallible>(Bytes::from(event.sse())),
+                            Some((source, translator, frames, log, log_path, permit)),
+                        ));
+                    }
+                    if translator.finished() {
+                        append_log(
+                            log_path.as_deref(),
+                            &log,
+                            "openai-chat",
+                            "ok",
+                            &translator.usage,
+                        );
+                        return None;
+                    }
+                    match source.pull(&mut translator).await {
+                        Ok(out) => frames.extend(out),
+                        Err(e) => {
+                            append_log(
+                                log_path.as_deref(),
+                                &log,
+                                "openai-chat",
+                                &e.message,
+                                &Value::Null,
+                            );
+                            return Some((
+                                Ok(Bytes::from(
+                                    Event {
+                                        name: "error",
+                                        data: e.event(),
+                                    }
+                                    .sse(),
+                                )),
+                                None,
+                            ));
+                        }
+                    }
+                }
+            },
+        );
+        Response::builder()
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(Body::from_stream(output))
+            .expect("static response headers")
+    }
+
     fn write_log(
         &self,
         log: &Log,
@@ -422,12 +603,60 @@ async fn messages(State(state): State<Arc<Bridge>>, request: Request) -> Respons
         Ok(incoming) => incoming,
         Err(response) => return *response,
     };
-    let mut input = match parse_json(&incoming.bytes) {
+    let input = match parse_json(&incoming.bytes) {
         Ok(input) => input,
         Err(response) => return *response,
     };
     let config = state.config();
-    let requested = input["model"].as_str().unwrap_or("").to_owned();
+    let first = crate::providers::canonical(input["model"].as_str().unwrap_or(""));
+    // The requested model, then its configured fallbacks; a fallback is tried only when the
+    // previous model failed before producing any output.
+    let mut chain = vec![first.clone()];
+    chain.extend(
+        config
+            .fallbacks
+            .get(&first)
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| crate::providers::canonical(m)),
+    );
+    let permit = Arc::new(permit);
+    let mut response = None;
+    for (attempt, model) in chain.iter().enumerate() {
+        let mut input = input.clone();
+        if attempt > 0 {
+            input["model"] = Value::String(model.clone());
+        }
+        let result = dispatch(
+            state.clone(),
+            &config,
+            model,
+            incoming.clone(),
+            input,
+            permit.clone(),
+        )
+        .await;
+        let failed = result.status().as_u16() >= 400;
+        response = Some(result);
+        if !failed {
+            break;
+        }
+    }
+    response.unwrap_or_else(|| error(404, "not_found_error", "No model requested"))
+}
+
+/// Serve one model: route it to its provider and translate as needed.
+async fn dispatch(
+    state: Arc<Bridge>,
+    config: &Config,
+    requested: &str,
+    incoming: Incoming,
+    mut input: Value,
+    permit: Arc<tokio::sync::OwnedSemaphorePermit>,
+) -> Response {
+    let config = config.clone();
+    let requested = requested.to_owned();
     let Some((provider, upstream_model)) = crate::providers::route(&config, &requested) else {
         return error(
             404,
@@ -449,6 +678,19 @@ async fn messages(State(state): State<Arc<Bridge>>, request: Request) -> Respons
         }
         (crate::providers::Protocol::OpenAiResponses, crate::providers::Auth::ChatGpt) => {
             input["model"] = Value::String(upstream_model);
+        }
+        (crate::providers::Protocol::OpenAiChat, _) => {
+            return state
+                .chat(
+                    &config,
+                    &provider,
+                    &upstream_model,
+                    &requested,
+                    input,
+                    &incoming.headers,
+                    permit,
+                )
+                .await;
         }
         (protocol, _) => {
             return error(
@@ -611,6 +853,95 @@ async fn passthrough(State(state): State<Arc<Bridge>>, request: Request) -> Resp
     state
         .forward(&config, &provider, None, incoming, &label)
         .await
+}
+
+type ByteStream =
+    std::pin::Pin<Box<dyn futures_util::Stream<Item = reqwest::Result<Bytes>> + Send>>;
+
+/// A Chat Completions SSE response, decoded into chunks on demand.
+struct ChatSource {
+    body: ByteStream,
+    decoder: crate::sse::SseDecoder,
+    queue: VecDeque<Value>,
+    ended: bool,
+}
+
+impl ChatSource {
+    async fn pull(
+        &mut self,
+        translator: &mut crate::chat::ChatTranslator,
+    ) -> Result<Vec<Event>, ProviderError> {
+        use futures_util::StreamExt;
+        loop {
+            if let Some(chunk) = self.queue.pop_front() {
+                return translator.handle(&chunk);
+            }
+            if self.ended {
+                return Ok(translator.finish());
+            }
+            let next = tokio::time::timeout(crate::upstream::EVENT_TIMEOUT, self.body.next()).await;
+            let frames = match next {
+                Ok(Some(Ok(bytes))) => self.decoder.push(&bytes),
+                Ok(Some(Err(_))) => {
+                    return Err(ProviderError::new(
+                        502,
+                        "api_error",
+                        "The provider's stream broke off",
+                    ));
+                }
+                Ok(None) => {
+                    self.ended = true;
+                    self.decoder.finish()
+                }
+                Err(_) => {
+                    return Err(ProviderError::new(
+                        504,
+                        "api_error",
+                        "The provider's stream stalled",
+                    ));
+                }
+            };
+            let frames = frames.map_err(|_| {
+                ProviderError::new(502, "api_error", "The provider sent a malformed stream")
+            })?;
+            for frame in frames {
+                if frame.data.trim() == "[DONE]" {
+                    self.ended = true;
+                    break;
+                }
+                match serde_json::from_str(&frame.data) {
+                    Ok(chunk) => self.queue.push_back(chunk),
+                    Err(_) => {
+                        return Err(ProviderError::new(
+                            502,
+                            "api_error",
+                            "The provider sent an invalid chunk",
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Append one request line to the bridge log (no content).
+fn append_log(path: Option<&Path>, log: &Log, transport: &str, outcome: &str, usage: &Value) {
+    let Some(path) = path else {
+        return;
+    };
+    let line = json!({
+        "at": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+        "session": log.session.chars().take(8).collect::<String>(),
+        "model": log.model,
+        "transport": transport,
+        "first_token_ms": log.first_token_ms,
+        "total_ms": log.started.elapsed().as_millis(),
+        "outcome": outcome,
+        "usage": usage,
+    });
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{line}");
+    }
 }
 
 fn load_or_create_key(dir: &Path) -> Result<String> {

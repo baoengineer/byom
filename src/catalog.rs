@@ -182,19 +182,26 @@ fn enrich(entry: &mut Entry, info: &Value) {
     entry.cost_output = info["cost"]["output"].as_f64().unwrap_or(entry.cost_output);
 }
 
+/// A provider's model list URL: OpenAI-style bases list at `{base}/models`, Anthropic-style
+/// bases at `{base}/v1/models`.
+pub fn models_url(provider: &crate::providers::Provider) -> String {
+    let base = provider.base_url.trim_end_matches('/');
+    if provider.protocol != crate::providers::Protocol::Anthropic || base.ends_with("/v1") {
+        format!("{base}/models")
+    } else {
+        format!("{base}/v1/models")
+    }
+}
+
 /// Model IDs a provider serves, from its OpenAI- or Anthropic-style `/v1/models`.
 async fn discover(
     client: &reqwest::Client,
     provider: &crate::providers::Provider,
     key: Option<&str>,
 ) -> Option<Vec<String>> {
-    let base = provider.base_url.trim_end_matches('/');
-    let url = if base.ends_with("/v1") {
-        format!("{base}/models")
-    } else {
-        format!("{base}/v1/models")
-    };
-    let mut request = client.get(url).timeout(std::time::Duration::from_secs(8));
+    let mut request = client
+        .get(models_url(provider))
+        .timeout(std::time::Duration::from_secs(8));
     if let Some(key) = key {
         request = request.bearer_auth(key).header("x-api-key", key);
     }

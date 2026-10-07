@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod auth;
 pub mod bridge;
 pub mod catalog;
+pub mod chat;
 pub mod config;
 pub mod doctor;
 pub mod launch;

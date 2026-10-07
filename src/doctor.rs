@@ -127,7 +127,9 @@ pub async fn run() -> Result<()> {
                 let key = crate::providers::api_key(&config, &provider);
                 match key {
                     Ok(Some(key)) => {
-                        let reachable = reach(&client, &provider.base_url, Some(&key)).await;
+                        let reachable =
+                            reach(&client, &crate::catalog::models_url(&provider), Some(&key))
+                                .await;
                         if reachable {
                             usable += 1;
                         }
@@ -149,7 +151,7 @@ pub async fn run() -> Result<()> {
                 }
             }
             Auth::None => {
-                if reach(&client, &provider.base_url, None).await {
+                if reach(&client, &crate::catalog::models_url(&provider), None).await {
                     usable += 1;
                     report.line(true, &provider.id, "local server running");
                 }
@@ -174,13 +176,7 @@ pub async fn run() -> Result<()> {
 
 /// Whether a provider's model list answers; any HTTP answer below 500 other than 401/403
 /// counts as reachable.
-async fn reach(client: &reqwest::Client, base: &str, key: Option<&str>) -> bool {
-    let base = base.trim_end_matches('/');
-    let url = if base.ends_with("/v1") {
-        format!("{base}/models")
-    } else {
-        format!("{base}/v1/models")
-    };
+async fn reach(client: &reqwest::Client, url: &str, key: Option<&str>) -> bool {
     let mut request = client.get(url);
     if let Some(key) = key {
         request = request.bearer_auth(key).header("x-api-key", key);
