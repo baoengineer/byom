@@ -1,6 +1,6 @@
-# OpenAI provider contract
+# ChatGPT plan provider contract
 
-byoclaude uses OpenAI's [ChatGPT plan usage in open-source apps](https://developers.openai.com/siwc/token-sharing-open-source) flow ("Sign in with ChatGPT"). It does not use API keys, the Codex backend, or credentials from other tools.
+The `openai` provider uses OpenAI's [ChatGPT plan usage in open-source apps](https://developers.openai.com/siwc/token-sharing-open-source) flow ("Sign in with ChatGPT"). It does not use the Codex backend or credentials from other tools. Other providers use API keys or no credential; see [ARCHITECTURE.md](ARCHITECTURE.md) for how each protocol is handled.
 
 ## Sign-in
 
@@ -8,7 +8,7 @@ byoclaude uses OpenAI's [ChatGPT plan usage in open-source apps](https://develop
 - Authorization code flow with PKCE (S256), state and nonce, on a `127.0.0.1` callback.
 - Scopes `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`, resource `https://api.openai.com/v1`. Sign-in fails without `chatgpt.tokens.use.direct`.
 - The ID token is verified against OpenAI's JWKS: issuer, audience, expiry and nonce.
-- Tokens are stored in `chatgpt.json` with owner-only permissions and atomic writes. Refresh rotates the refresh token and is serialized across processes with a lock file.
+- Tokens are stored in `auth.json` under `openai`, with owner-only permissions and atomic writes. Refresh rotates the refresh token and is serialized across processes with a lock file.
 
 ## Models
 

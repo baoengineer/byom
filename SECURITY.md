@@ -2,18 +2,21 @@
 
 ## What byoclaude stores
 
-All state lives in `~/.byoclaude-rs` (or `$BYOCLAUDE_HOME`), a directory readable only by you:
+All state lives in `~/.byoclaude` (or `$BYOCLAUDE_HOME`), a directory only you can read:
 
-- `chatgpt.json`: your ChatGPT OAuth tokens (access, rotating refresh, ID token) and the issued client ID. Written atomically with mode `0600`.
-- `bridge.key`: a random 256-bit key that Claude Code must present to the local bridge. Mode `0600`.
-- `config.json`, `models.json`: settings and the cached model list.
-- `bridge.log`: per-request metadata (model, timing, token counts). No prompt or response content.
+- `auth.json`: credentials keyed by provider. The ChatGPT sign-in (access, rotating refresh and ID tokens, issued client ID) and API keys you paste. Written atomically with mode `0600`.
+- `bridge.key`: a random 256-bit key Claude Code must present to the local bridge. Mode `0600`.
+- `config.json`: settings. API keys can be referenced as `$ENV_VAR` or `!command` instead of stored.
+- `cache/`, `plugin/`: model catalogs and the generated session plugin.
+- `logs/bridge.log`: per-request metadata (model, route, timing, token counts). No prompt or response content, no credentials.
 
 ## Network exposure
 
-The bridge listens only on `127.0.0.1` and rejects requests without the bridge key. Tokens are sent only to `auth.openai.com` and `api.openai.com`. byoclaude never reads credentials belonging to Claude Code, Codex or other tools, and removes other providers' credentials from the environment it passes to Claude Code.
+The bridge listens only on `127.0.0.1` and rejects requests without the bridge key. Each credential is sent only to its own provider's API.
 
-To revoke access, disconnect byoclaude in ChatGPT settings and delete `chatgpt.json`.
+The Claude relay forwards Claude Code's own Anthropic credential, as Claude Code sent it, to `api.anthropic.com` (or a configured Anthropic base URL) and nowhere else. byoclaude never stores it, never reads Claude Code's credential files or keychain entries, and never reads credentials belonging to other tools. With the relay active, Claude Code keeps its own credential variables; without it, the launcher removes other providers' credentials from the environment it passes to Claude Code.
+
+To revoke access: remove a key with `byoclaude logout <provider>`, and for ChatGPT also disconnect byoclaude in ChatGPT settings.
 
 ## Reporting a vulnerability
 

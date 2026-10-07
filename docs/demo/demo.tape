@@ -1,5 +1,5 @@
-# Records docs/demo/demo.gif against the local mock OpenAI server (no account, no plan usage).
-# From the repository root:
+# Records docs/demo/demo.gif against local mock OpenAI and Anthropic servers (no account, no
+# plan usage). From the repository root:
 #   cargo build --release --bin byoclaude --example mock_openai && vhs docs/demo/demo.tape
 Output docs/demo/demo.gif
 
@@ -17,40 +17,24 @@ Enter
 Sleep 1s
 Show
 
-# 1. Pick models from your ChatGPT plan.
+# 1. Every model you can sign in to, in one place.
 Type "byoclaude config"
 Sleep 300ms
 Enter
-Sleep 1.5s
+Sleep 2.2s
+Down
+Sleep 400ms
 Enter
 Sleep 1.2s
-Down
-Sleep 300ms
-Down
-Sleep 500ms
-Enter
-Sleep 800ms
-Down
-Sleep 300ms
-Enter
-Sleep 1s
-Down
-Sleep 200ms
-Down
-Sleep 200ms
-Down
-Sleep 200ms
-Down
-Sleep 500ms
-Enter
-Sleep 800ms
+Tab
+Sleep 1.8s
 Type "s"
-Sleep 1.5s
+Sleep 1s
 Type "q"
-Sleep 500ms
+Sleep 400ms
 
 # 2. Claude Code, running on GPT.
-Type "byoclaude run"
+Type "byoclaude"
 Sleep 300ms
 Enter
 Sleep 6s
@@ -59,11 +43,11 @@ Sleep 400ms
 Enter
 Sleep 5s
 
-# 3. /model lists the plan's GPT models.
+# 3. Claude and GPT side by side in /model.
 Type "/model"
 Sleep 600ms
 Enter
-Sleep 4s
+Sleep 4.5s
 Escape
 Sleep 800ms
 

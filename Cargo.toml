@@ -1,10 +1,10 @@
 [package]
 name = "byoclaude"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
-description = "Run OpenAI GPT models inside Claude Code on your ChatGPT Plus/Pro plan"
+description = "Bring your own Claude: every model you can sign in to, inside Claude Code"
 repository = "https://github.com/baoengineer/byoclaude"
 homepage = "https://github.com/baoengineer/byoclaude"
 readme = "README.md"

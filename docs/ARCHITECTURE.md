@@ -1,58 +1,63 @@
 # Architecture
 
 ```text
-byoclaude run ──exec──▶ claude ──Anthropic Messages (HTTP/SSE)──▶ bridge ──Responses (WebSocket)──▶ OpenAI
-      │                                                               │
-      └── starts the bridge, passes --settings and environment        └── one process, 127.0.0.1 only
+byoclaude run ──exec──▶ claude (unmodified) ──Anthropic Messages──▶ bridge (127.0.0.1) ──▶ providers
+      │                    --settings: model picker rows                │
+      │                    --plugin-dir: skill + one agent per model    ├─ route by model ID
+      └─ starts or replaces the bridge                                   └─ forward, translate or relay
 ```
 
-Claude Code is unmodified. The launcher points it at the local bridge with `ANTHROPIC_BASE_URL` and a per-install bearer key, and the bridge translates each request to the OpenAI Responses API.
+## Request routing
+
+Model IDs decide everything. `claude-*` goes to the `anthropic` provider; `provider/model` goes to that provider (`openai/gpt-5.6-sol`, `kimi/k3`, `ollama/qwen3:1.7b`). A bare non-Claude ID from a 0.1.0 config is treated as `openai/<id>`.
+
+Each provider has a protocol:
+
+| Protocol | Providers | What the bridge does |
+|---|---|---|
+| `anthropic` | anthropic (relay), zai, kimi, moonshot, minimax, deepseek, openrouter, ollama, lmstudio, custom | Forwards the request: base URL swap, model rewritten to the provider's name, credential swap (except the relay), Claude-only `anthropic-beta` dropped. Response status, headers and stream pass through. |
+| `openai-responses` | openai (ChatGPT plan) | Translates to the Responses API over a per-session WebSocket ([PROVIDER.md](PROVIDER.md)). |
+| `openai-chat` | groq, mistral, gemini, cerebras, together, xai, custom | Translates to Chat Completions and back: text, images, tool calls, reasoning as thinking, usage. |
+
+If a model fails before producing output and `fallbacks` names alternatives, the bridge tries them in order.
+
+## The Claude relay
+
+When Claude Code is signed in (`claude auth status --json` reports `loggedIn`) and `relay` is on, the launcher leaves Claude Code's own credential in place and sends the bridge key in `x-byoclaude-key` through `ANTHROPIC_CUSTOM_HEADERS`. Claude requests reach Anthropic byte for byte, with Claude Code's `Authorization`. Other Anthropic API paths Claude Code calls are passed through the same way. With the relay off or no Claude sign-in, the launcher sets `ANTHROPIC_AUTH_TOKEN` to the bridge key, hides Claude rows, and points every slot at other providers.
 
 ## Launcher (`launch.rs`)
 
-- Reads `config.json` and the cached model catalog, then builds a launch plan: main model, background model and context window.
-- Passes `--settings` with a `modelPicker` that lists the plan's models, each with `behavesAs` set to a Claude model this Claude Code release knows. Claude Code then applies that model's client-side handling (effort levels, adaptive thinking, prompt profile) and accepts the GPT model IDs without an "unrecognized model" warning.
-- Sets `ANTHROPIC_MODEL`, the default Opus/Sonnet/Haiku models, `CLAUDE_CODE_MAX_CONTEXT_TOKENS` and `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, disables tool search (unsupported upstream), and removes other providers' credentials from the environment.
-- Starts the bridge if needed. `/health` reports the bridge version; a bridge from another version is replaced through `/shutdown`.
+- Builds a plan: main, background (`haiku` slot), `opus`/`sonnet` aliases, subagent default, context window. With the relay, unset slots keep Claude Code's defaults.
+- Passes `--settings` with a `modelPicker` whose rows are every usable non-Claude model, each with `behavesAs` (default `claude-opus-5-5`) so Claude Code applies effort levels and thinking and accepts the ID. With the relay, rows are added to Claude Code's built-in list; without it they replace it.
+- Generates the session plugin (`skill.rs`) under `~/.byoclaude/plugin` and passes `--plugin-dir`.
+- Disables tool search, since non-Claude models never receive deferred tools.
 
-## Bridge (`bridge.rs`)
+## Claude-facing layer (`skill.rs`, `roster.rs`)
 
-Routes: `POST /v1/messages` (streaming and non-streaming), `POST /v1/messages/count_tokens` (local estimate), `GET /v1/models`, `GET /health`, `POST /shutdown`. Every route requires the bridge key.
+The Agent tool's `model` field accepts only Claude aliases, but agent definitions accept any model ID. The plugin therefore contains one general-purpose agent per model (`byoclaude:openai-gpt-5-6-sol`) and a pointer skill. `byoclaude --skill` prints the guide for the installed version; `byoclaude models --json` returns the roster with each model's agent type, limits, price and live status (`capped` comes from recent limit errors in the log).
 
-Response headers are held until the first content event arrives. A failure before any output therefore returns a real HTTP status, so Claude Code shows the reason instead of falling back to a non-streaming retry. The bridge appends one line per request to `bridge.log`: model, transport, continuation, items sent, time to first token and usage. It never logs content.
+## Catalog (`catalog.rs`)
 
-## Request translation (`request.rs`)
+The roster combines each usable provider's model list (`/v1/models` or `/models`, by protocol), the ChatGPT account catalog, and models.dev metadata (context window, max output, reasoning, tools, images, price). Providers without a model list fall back to models.dev; providers listing more than 25 models offer only those named in `providers.<id>.models`. The roster is cached in `cache/roster.json`; `models --refresh`, `login` and `r` in `byoclaude config` rebuild it.
 
-- Intake is tolerant: unknown fields and block types are dropped, never fatal, so newer Claude Code releases keep working.
-- `system` blocks become `instructions`; mid-conversation `system` messages become developer messages.
-- Text, images (`input_image`), PDFs (`input_file`), tool calls (`function_call`) and tool results (`function_call_output`) map directly.
-- Tools go into an `additional_tools` item; `web_search_*` server tools become the hosted `web_search` tool.
-- `output_config.effort` becomes `reasoning.effort`, clamped to the levels the model supports. Adaptive or enabled thinking turns on reasoning summaries and encrypted reasoning.
-- Consecutive same-role messages are merged and cache annotations are stripped, so a conversation compares equal across turns.
+## State (`store.rs`)
 
-## Stream translation (`response.rs`)
-
-- Output items are emitted strictly in `output_index` order, buffering later items, so Anthropic content blocks never interleave.
-- A reasoning item becomes a `thinking` block (summary text, then a signature carrying `byoc1.<model>.<encrypted_content>`), or a `redacted_thinking` block when there is no summary. On the next turn the signature is decoded and the reasoning replayed, but only to the same model.
-- `web_search_call` becomes `server_tool_use` plus `web_search_tool_result`.
-- `response.completed` provides the stop reason and usage, with cached tokens reported as `cache_read_input_tokens`.
-
-## Transport (`upstream.rs`)
-
-- A pool of WebSocket connections keyed by Claude Code's session ID (`X-Claude-Code-Session-Id`). Each connection remembers the conversation it last served: request settings, tools and normalized messages.
-- When the next request extends that conversation, only the new messages (and any newly added tools) are sent, with `previous_response_id`. Otherwise the full input is sent. Background requests and subagents in the same session use separate connections so they do not evict the main conversation.
-- One spare connection is kept warm for new sessions. Idle connections older than four minutes are not reused.
-- A failure before the first event, including a rejected continuation, is retried once on a fresh connection with the full input. Nothing is retried after output starts. If WebSocket connection fails, the request goes over HTTP.
+`~/.byoclaude` (or `$BYOCLAUDE_HOME`): `config.json`, `auth.json` (credentials keyed by provider, owner-only, written atomically under `auth.lock`), `bridge.key`, `host-id`, `cache/`, `logs/bridge.log` (metadata only), `plugin/`. A 0.1.0 `~/.byoclaude-rs` is copied over on first run.
 
 ## Other modules
 
-- `auth.rs`: sign-in and token refresh ([PROVIDER.md](PROVIDER.md)).
-- `catalog.rs`: account model catalog and its cache.
-- `config.rs`: `config.json` and the state directory (`$BYOCLAUDE_HOME`, default `~/.byoclaude-rs`).
-- `settings.rs`: the `byoclaude config` terminal UI.
-- `sse.rs`: incremental SSE decoder for the HTTP transport.
+| Module | Role |
+|---|---|
+| `bridge.rs` | HTTP server, authentication, fallback loop, per-route logging including usage read from forwarded streams |
+| `relay.rs` | Header and body preparation for forwarded routes |
+| `request.rs`, `response.rs`, `upstream.rs` | Responses API translation and WebSocket transport |
+| `chat.rs` | Chat Completions translation |
+| `accounts.rs` | `login`, `logout`, `auth` |
+| `doctor.rs` | `doctor` |
+| `tui.rs` | `byoclaude config` |
+| `auth.rs` | Sign in with ChatGPT |
 
 ## Testing
 
-- `cargo test`: unit tests for translation, transport planning, the config UI (rendered with ratatui's test backend), and a launcher process test that runs a fake `claude` against a real bridge.
-- `tests/e2e/run.sh`: the installed Claude Code driven through `byoclaude run` against `examples/mock_openai.rs`, a scripted Responses WebSocket server. It uses an isolated Claude config directory and no plan usage, and checks thinking display, tool execution, reasoning carried across turns, WebSocket continuation and the WebSearch tool.
+- `cargo test`: translation, routing, relay header handling, launch plans, the config UI (ratatui test backend), and a launcher process test with a fake `claude`.
+- `tests/e2e/run.sh`: the installed Claude Code through `byoclaude run` against `examples/mock_openai.rs` (a Responses WebSocket mock plus an Anthropic HTTP mock). It covers thinking, tool execution, reasoning carried across turns, WebSocket continuation, web search, the Claude relay with Claude Code's credential, and a subagent running on another provider through the plugin agent.
