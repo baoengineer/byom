@@ -6,6 +6,9 @@
 //! search result; everything else gets a text answer. Each request is logged as one JSON
 //! line to the file named by `MOCK_LOG`.
 //!
+//! `MOCK_THINKING`, `MOCK_COMMAND` and `MOCK_ANSWER` replace the scripted reasoning
+//! summary, Bash command and final answer; the README demo uses them.
+//!
 //! Usage: cargo run --example mock_openai -- <port>
 use std::collections::HashSet;
 use std::io::Write;
@@ -99,21 +102,27 @@ fn respond(
             r#"{"query":"mock query"}"#,
         ));
     } else if issued.contains("bash") || text.contains("SEARCHTEST") || !has_tools {
-        events.extend(message(0, "Mock done."));
+        events.extend(message(0, &script("MOCK_ANSWER", "Mock done.")));
     } else {
         issued.insert("bash");
+        let thinking = script("MOCK_THINKING", "Planning a shell check.");
+        let arguments = json!({"command": script("MOCK_COMMAND", "echo mock-ok"), "description": "Run command"});
         events.push(json!({"type": "response.output_item.added", "output_index": 0, "item": {"type": "reasoning", "id": "r1"}}));
-        events.push(json!({"type": "response.reasoning_summary_text.delta", "output_index": 0, "summary_index": 0, "delta": "Planning a shell check."}));
+        events.push(json!({"type": "response.reasoning_summary_text.delta", "output_index": 0, "summary_index": 0, "delta": thinking}));
         events.push(json!({"type": "response.output_item.done", "output_index": 0, "item": {"type": "reasoning", "id": "r1", "encrypted_content": format!("ENC{conn}")}}));
         events.extend(call(
             1,
             &format!("call_{conn}_{}", input.len()),
             "Bash",
-            r#"{"command":"echo mock-ok","description":"Print marker"}"#,
+            &arguments.to_string(),
         ));
     }
     events.push(json!({"type": "response.completed", "response": {"id": id, "status": "completed", "output": [], "usage": {"input_tokens": 100, "input_tokens_details": {"cached_tokens": 40}, "output_tokens": 10}}}));
     events
+}
+
+fn script(name: &str, default: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| default.to_owned())
 }
 
 fn message(index: u64, text: &str) -> Vec<Value> {
