@@ -1,0 +1,40 @@
+[package]
+name = "byoclaude"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+description = "Run OpenAI GPT models inside Claude Code on your ChatGPT Plus/Pro plan"
+repository = "https://github.com/baoengineer/byoclaude"
+homepage = "https://github.com/baoengineer/byoclaude"
+readme = "README.md"
+keywords = ["claude-code", "openai", "chatgpt", "gpt", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [".github/", "tests/e2e/", "docs/demo/"]
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+sha2 = "0.10"
+fs2 = "0.4"
+jsonwebtoken = { version = "9", default-features = false, features = ["use_pem"] }
+uuid = { version = "1", features = ["v4"] }
+axum = "0.8"
+bytes = "1"
+clap = { version = "4", features = ["derive"] }
+futures-util = { version = "0.3", features = ["sink"] }
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tokio-tungstenite = { version = "0.27", features = ["rustls-tls-webpki-roots"] }
+ratatui = { version = "0.30", default-features = false, features = ["crossterm_0_29", "layout-cache"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+strip = true
