@@ -214,9 +214,10 @@ async fn ensure_bridge(client: &reqwest::Client) -> Result<String> {
 
 /// Bridge diagnostics go to a file, not the terminal Claude Code draws on.
 fn bridge_stderr() -> Stdio {
-    crate::config::state_dir()
+    crate::store::logs_dir()
         .ok()
         .and_then(|dir| {
+            crate::store::private_dir(&dir).ok()?;
             std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -273,8 +274,8 @@ pub fn plan(
         .or_else(|| listed.first().map(|m| m.slug.clone()))
         .context("no models available; run byoclaude models to check your ChatGPT plan")?;
     // Background work (titles, summaries) goes to the smallest listed model.
-    let small_model = (!config.small_model.is_empty())
-        .then(|| config.small_model.clone())
+    let small_model = (!config.background.is_empty())
+        .then(|| config.background.clone())
         .or_else(|| {
             listed
                 .iter()
@@ -378,7 +379,7 @@ pub async fn status() -> Result<()> {
         println!(
             "Bridge {version} ready at http://127.0.0.1:{}; request log: {}",
             port(),
-            crate::config::state_dir()?.join("bridge.log").display()
+            crate::store::log_path()?.display()
         );
         return Ok(());
     }

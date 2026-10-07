@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -10,32 +11,89 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
-    /// Main model slug; empty picks the first model in the account catalog.
+    /// Main model ID; empty picks the first model in the catalog.
     pub model: String,
-    /// Model for Claude Code's background work; empty picks a small catalog model.
-    pub small_model: String,
-    pub provider: String,
+    /// Model for Claude Code's background work (titles, summaries); empty picks a small model.
+    #[serde(alias = "small_model")]
+    pub background: String,
+    /// Default model for subagents that do not name one; empty leaves Claude Code's default.
+    pub subagent: String,
+    /// Model IDs that Claude Code's opus/sonnet/haiku aliases resolve to.
+    pub aliases: Aliases,
+    /// Relay Claude models to Anthropic on Claude Code's own sign-in.
+    pub relay: bool,
     pub upstream_base_url: String,
     /// Context window Claude Code compacts against; 0 uses the catalog value.
     pub context_tokens: u64,
     /// `auto` (WebSocket with HTTP fallback) or `http`.
     pub transport: String,
-    /// Claude model whose client-side handling Claude Code applies to GPT models.
+    /// Claude model whose client-side handling Claude Code applies to other models.
     pub behaves_as: String,
+    /// Provider settings and user-defined providers, keyed by provider ID.
+    pub providers: BTreeMap<String, ProviderConfig>,
+    /// Models to try, in order, when a model fails before producing output.
+    pub fallbacks: BTreeMap<String, Vec<String>>,
+    /// Accepted from 0.1.0 configs and ignored.
+    #[serde(rename = "provider", skip_serializing)]
+    #[doc(hidden)]
+    pub legacy_provider: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct Aliases {
+    pub opus: String,
+    pub sonnet: String,
+    pub haiku: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct ProviderConfig {
+    pub name: String,
+    /// `anthropic`, `openai-chat` or `openai-responses`; empty uses the built-in value.
+    pub protocol: String,
+    pub base_url: String,
+    /// A key, `$ENV_VAR`, or `!command` printing the key.
+    pub api_key: String,
+    /// Model IDs to offer when the provider has no usable model list.
+    pub models: Vec<String>,
+    pub disabled: bool,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             model: String::new(),
-            small_model: String::new(),
-            provider: "openai".to_owned(),
+            background: String::new(),
+            subagent: String::new(),
+            aliases: Aliases::default(),
+            relay: true,
             upstream_base_url: "https://api.openai.com/v1".to_owned(),
             context_tokens: 0,
             transport: "auto".to_owned(),
             behaves_as: "claude-opus-5-5".to_owned(),
+            providers: BTreeMap::new(),
+            fallbacks: BTreeMap::new(),
+            legacy_provider: None,
         }
     }
+}
+
+fn check_url(name: &str, value: &str) -> Result<()> {
+    // URL parsing is local; HTTP also supports loopback and local servers.
+    let url = reqwest::Url::parse(value)
+        .with_context(|| format!("{name} must be an absolute HTTP or HTTPS URL"))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        bail!("{name} must be an absolute HTTP or HTTPS URL");
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        bail!("{name} must not contain credentials");
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        bail!("{name} must not contain a query or fragment");
+    }
+    Ok(())
 }
 
 /// Resolve local state without creating directories or reading credentials.
@@ -53,7 +111,7 @@ fn resolve_state_dir(state_home: Option<OsString>, home: Option<OsString>) -> Re
     let home = home
         .filter(|path| !path.is_empty())
         .context("cannot resolve state directory: set BYOCLAUDE_HOME or HOME")?;
-    Ok(PathBuf::from(home).join(".byoclaude-rs"))
+    Ok(PathBuf::from(home).join(".byoclaude"))
 }
 
 /// Read only the local config.json. A missing file uses defaults; other errors do not.
@@ -82,10 +140,22 @@ fn load_from_path(path: &Path) -> Result<Config> {
 
 impl Config {
     pub fn validate(&self) -> Result<()> {
-        if self.model.trim() != self.model || self.small_model.trim() != self.small_model {
+        let names = [
+            &self.model,
+            &self.background,
+            &self.subagent,
+            &self.aliases.opus,
+            &self.aliases.sonnet,
+            &self.aliases.haiku,
+        ];
+        if names.iter().any(|n| n.trim() != n.as_str()) {
             bail!("model names must not have surrounding whitespace");
         }
-        if self.provider != "openai" {
+        if self
+            .legacy_provider
+            .as_deref()
+            .is_some_and(|p| p != "openai")
+        {
             bail!("provider must be openai");
         }
         if !matches!(self.transport.as_str(), "auto" | "http") {
@@ -94,17 +164,24 @@ impl Config {
         if self.behaves_as.trim().is_empty() {
             bail!("behaves_as must name a Claude model");
         }
-        // URL parsing is local; HTTP also supports loopback mock upstreams.
-        let url = reqwest::Url::parse(&self.upstream_base_url)
-            .context("upstream_base_url must be an absolute HTTP or HTTPS URL")?;
-        if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
-            bail!("upstream_base_url must be an absolute HTTP or HTTPS URL");
-        }
-        if !url.username().is_empty() || url.password().is_some() {
-            bail!("upstream_base_url must not contain credentials");
-        }
-        if url.query().is_some() || url.fragment().is_some() {
-            bail!("upstream_base_url must not contain a query or fragment");
+        check_url("upstream_base_url", &self.upstream_base_url)?;
+        for (id, provider) in &self.providers {
+            if id.is_empty()
+                || !id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_.".contains(&b))
+            {
+                bail!("provider ID {id:?} may contain only letters, digits, '-', '_' and '.'");
+            }
+            if !matches!(
+                provider.protocol.as_str(),
+                "" | "anthropic" | "openai-chat" | "openai-responses"
+            ) {
+                bail!("providers.{id}.protocol must be anthropic, openai-chat or openai-responses");
+            }
+            if !provider.base_url.is_empty() {
+                check_url(&format!("providers.{id}.base_url"), &provider.base_url)?;
+            }
         }
         Ok(())
     }
@@ -125,7 +202,7 @@ mod tests {
     fn defaults_match_contract() {
         let config = Config::default();
         assert_eq!(config.model, "");
-        assert_eq!(config.provider, "openai");
+        assert!(config.relay);
         assert_eq!(config.upstream_base_url, "https://api.openai.com/v1");
         assert_eq!(config.transport, "auto");
         config.validate().unwrap();
@@ -139,7 +216,7 @@ mod tests {
         );
         assert_eq!(
             resolve_state_dir(None, Some("/home/user".into())).unwrap(),
-            PathBuf::from("/home/user/.byoclaude-rs")
+            PathBuf::from("/home/user/.byoclaude")
         );
         assert!(resolve_state_dir(Some("".into()), Some("/home/user".into())).is_err());
         assert!(resolve_state_dir(None, None).is_err());
@@ -161,7 +238,6 @@ mod tests {
     fn partial_config_uses_defaults() {
         let config = read_json(r#"{"model":"custom-model"}"#).unwrap();
         assert_eq!(config.model, "custom-model");
-        assert_eq!(config.provider, "openai");
         assert_eq!(read_json("{}").unwrap(), Config::default());
     }
 

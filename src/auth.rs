@@ -1,19 +1,17 @@
 //! Direct ChatGPT-plan OAuth. No credential import from other tools and no API-key fallback.
+use crate::store;
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use fs2::FileExt;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header, jwk::JwkSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 #[cfg(test)]
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Provider key for the ChatGPT session in auth.json.
+const PROVIDER: &str = "openai";
 const ISSUER: &str = "https://auth.openai.com";
 const TOKEN: &str = "https://auth.openai.com/api/accounts/oauth/token";
 const RESOURCE: &str = "https://api.openai.com/v1";
@@ -46,91 +44,8 @@ fn client() -> Result<reqwest::Client> {
         .timeout(Duration::from_secs(30))
         .build()?)
 }
-fn path() -> Result<PathBuf> {
-    Ok(crate::config::state_dir()?.join("chatgpt.json"))
-}
-fn private_dir(path: &Path) -> Result<()> {
-    let mut b = fs::DirBuilder::new();
-    b.recursive(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        b.mode(0o700);
-    }
-    b.create(path)?;
-    let m = fs::symlink_metadata(path)?;
-    if !m.is_dir() || m.file_type().is_symlink() {
-        bail!("OAuth state directory must be a regular directory");
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if m.permissions().mode() & 0o022 != 0 {
-            bail!("OAuth state directory must not be writable by others");
-        }
-    }
-    Ok(())
-}
-fn read_private(path: &Path) -> Result<Vec<u8>> {
-    let before = match fs::symlink_metadata(path) {
-        Ok(meta) => meta,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            bail!("Not signed in. Run: byoclaude login")
-        }
-        Err(e) => return Err(e).context("reading ChatGPT sign-in"),
-    };
-    if !before.is_file() || before.file_type().is_symlink() {
-        bail!("OAuth file must not be a symlink");
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if before.permissions().mode() & 0o077 != 0 {
-            bail!("OAuth file must have owner-only permissions (0600)");
-        }
-    }
-    let f = File::open(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let after = f.metadata()?;
-        if before.dev() != after.dev() || before.ino() != after.ino() {
-            bail!("OAuth file changed during read");
-        }
-    }
-    let mut bytes = Vec::new();
-    f.take(128 * 1024 + 1).read_to_end(&mut bytes)?;
-    if bytes.len() > 128 * 1024 {
-        bail!("OAuth file exceeds limit");
-    }
-    Ok(bytes)
-}
-pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
-    let parent = path.parent().context("missing OAuth parent")?;
-    private_dir(parent)?;
-    let temp = parent.join(format!(".oauth-{}.tmp", uuid::Uuid::new_v4()));
-    let mut opts = OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    let result = (|| -> Result<()> {
-        let mut f = opts.open(&temp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-        fs::rename(&temp, path)?;
-        File::open(parent)?.sync_all()?;
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(temp);
-    }
-    result
-}
-fn load_from(path: &Path) -> Result<Session> {
-    let s: Session = serde_json::from_slice(&read_private(path)?)
+fn parse(bytes: &[u8]) -> Result<Session> {
+    let s: Session = serde_json::from_slice(bytes)
         .map_err(|_| anyhow::anyhow!("Invalid OAuth state; sign in again with byoclaude login"))?;
     if s.client_id.is_empty()
         || s.client_id == "dynamic_agent_client"
@@ -143,30 +58,18 @@ fn load_from(path: &Path) -> Result<Session> {
     }
     Ok(s)
 }
-async fn lock() -> Result<File> {
-    let dir = crate::config::state_dir()?;
-    private_dir(&dir)?;
-    let p = dir.join("oauth.lock");
-    if let Ok(m) = fs::symlink_metadata(&p)
-        && (!m.is_file() || m.file_type().is_symlink())
-    {
-        bail!("Invalid OAuth lock file");
+/// The stored ChatGPT session, if signed in.
+fn load() -> Result<Option<Session>> {
+    match store::auth::get(PROVIDER)? {
+        None => Ok(None),
+        Some(value) => parse(&serde_json::to_vec(&value)?).map(Some),
     }
-    let mut opts = OpenOptions::new();
-    opts.read(true).write(true).create(true).truncate(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    let f = opts.open(p)?;
-    for _ in 0..600 {
-        if f.try_lock_exclusive().is_ok() {
-            return Ok(f);
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-    bail!("Another OAuth operation is busy; retry shortly")
+}
+fn save(session: &Session) -> Result<()> {
+    store::auth::set(PROVIDER, serde_json::to_value(session)?)
+}
+fn signed_in() -> Result<Session> {
+    load()?.context("Not signed in. Run: byoclaude login")
 }
 fn token_session(
     v: &Value,
@@ -336,21 +239,16 @@ fn callback(query: &str, state: &str, previous: Option<&str>) -> Result<(String,
 }
 pub async fn login() -> Result<()> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let _lock = lock().await?;
-    let p = path()?;
-    let previous = if p.try_exists()? {
-        Some(load_from(&p)?)
-    } else {
-        None
-    };
-    let dir = crate::config::state_dir()?;
-    let host_path = dir.join("host-id");
-    let host = if host_path.try_exists()? {
-        String::from_utf8(read_private(&host_path)?)?
-    } else {
-        let h = format!("urn:uuid:{}", uuid::Uuid::new_v4());
-        write_private(&host_path, h.as_bytes())?;
-        h
+    let _lock = store::lock().await?;
+    let previous = load()?;
+    let host_path = store::home()?.join("host-id");
+    let host = match store::read_private(&host_path)? {
+        Some(bytes) => String::from_utf8(bytes)?,
+        None => {
+            let h = format!("urn:uuid:{}", uuid::Uuid::new_v4());
+            store::write_private(&host_path, h.as_bytes())?;
+            h
+        }
     };
     uuid::Uuid::parse_str(
         host.strip_prefix("urn:uuid:")
@@ -440,7 +338,7 @@ pub async fn login() -> Result<()> {
         bail!("Returning login identity mismatch; existing credentials unchanged");
     }
     let s = token_session(&token, &result.1, (&identity.0, identity.1), None)?;
-    write_private(&p, &serde_json::to_vec(&s)?)?;
+    save(&s)?;
     println!(
         "Signed in. Using ChatGPT plan—not an API key. Manage usage: https://chatgpt.com/settings/usage\nRun `byoclaude models` to see your available model IDs."
     );
@@ -448,9 +346,8 @@ pub async fn login() -> Result<()> {
 }
 /// A valid access token for the signed-in account, refreshing it when near expiry.
 pub async fn access_token() -> Result<String> {
-    let _lock = lock().await?;
-    let p = path()?;
-    let mut s = load_from(&p)?;
+    let _lock = store::lock().await?;
+    let mut s = signed_in()?;
     if now() + 180 >= s.expires_at {
         if now() < s.earliest_refresh_at {
             bail!("Token renewal is not yet permitted; retry later");
@@ -471,13 +368,13 @@ pub async fn access_token() -> Result<String> {
             (&s.subject, s.email.clone()),
             Some(&s),
         )?;
-        write_private(&p, &serde_json::to_vec(&next)?)?;
+        save(&next)?;
         s = next;
     }
     Ok(s.access_token)
 }
 pub fn status() -> Result<()> {
-    let s = load_from(&path()?)?;
+    let s = signed_in()?;
     println!(
         "ChatGPT subscription OAuth: signed in; token {}",
         if now() < s.expires_at {
@@ -573,10 +470,7 @@ mod tests {
         assert_eq!(fields["client_id"], "issued");
         assert_eq!(fields["code_verifier"], "dummy-verifier");
         let s = token_session(&token, "issued", ("subject", None), None).unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("chatgpt.json");
-        write_private(&path, &serde_json::to_vec(&s).unwrap()).unwrap();
-        let loaded = load_from(&path).unwrap();
+        let loaded = parse(&serde_json::to_vec(&s).unwrap()).unwrap();
         let refreshed = exchange_at(
             &c,
             &endpoint,
@@ -600,8 +494,7 @@ mod tests {
             Some(&loaded),
         )
         .unwrap();
-        write_private(&path, &serde_json::to_vec(&next).unwrap()).unwrap();
-        let saved = load_from(&path).unwrap();
+        let saved = parse(&serde_json::to_vec(&next).unwrap()).unwrap();
         assert_eq!(saved.access_token, "fresh-access");
         assert_eq!(saved.refresh_token, "rotated-refresh");
         assert_eq!(saved.subject, "subject");
@@ -628,24 +521,5 @@ mod tests {
         let mut denied = v.clone();
         denied["scope"] = json!("openid");
         assert!(token_session(&denied, "issued", ("subject", None), None).is_err());
-    }
-    #[test]
-    fn protected_atomic_storage() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("session");
-        write_private(&path, b"one").unwrap();
-        write_private(&path, b"two").unwrap();
-        assert_eq!(read_private(&path).unwrap(), b"two");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::{PermissionsExt, symlink};
-            assert_eq!(
-                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
-                0o600
-            );
-            let link = dir.path().join("link");
-            symlink(&path, &link).unwrap();
-            assert!(read_private(&link).is_err());
-        }
     }
 }

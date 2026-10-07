@@ -70,7 +70,8 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
 "##).unwrap();
     fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
     let catalog = r#"[{"slug":"configured-model","display_name":"","description":"","context_window":0,"effort_levels":[],"default_effort":null,"listed":true}]"#;
-    fs::write(home.join("models.json"), catalog).unwrap();
+    fs::create_dir_all(home.join("cache")).unwrap();
+    fs::write(home.join("cache/models.json"), catalog).unwrap();
     let upstream = TcpListener::bind(("127.0.0.1", 0)).unwrap();
     upstream.set_nonblocking(true).unwrap();
     fs::write(
@@ -209,7 +210,8 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
     let wrong_home = temp.path().join("wrong-state");
     fs::create_dir(&wrong_home).unwrap();
     fs::write(wrong_home.join("bridge.key"), "b".repeat(64)).unwrap();
-    fs::write(wrong_home.join("models.json"), catalog).unwrap();
+    fs::create_dir_all(wrong_home.join("cache")).unwrap();
+    fs::write(wrong_home.join("cache/models.json"), catalog).unwrap();
     fs::set_permissions(
         wrong_home.join("bridge.key"),
         fs::Permissions::from_mode(0o600),

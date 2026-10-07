@@ -166,10 +166,10 @@ impl App {
         match field {
             Field::Model if self.config.model.is_empty() => auto(plan.map(|p| p.model)),
             Field::Model => self.config.model.clone(),
-            Field::SmallModel if self.config.small_model.is_empty() => {
+            Field::SmallModel if self.config.background.is_empty() => {
                 auto(plan.map(|p| p.small_model))
             }
-            Field::SmallModel => self.config.small_model.clone(),
+            Field::SmallModel => self.config.background.clone(),
             Field::Context if self.config.context_tokens == 0 => {
                 auto(plan.map(|p| k(p.context_tokens)))
             }
@@ -280,7 +280,7 @@ impl App {
     fn current(&self, field: Field) -> Option<String> {
         let value = match field {
             Field::Model => self.config.model.clone(),
-            Field::SmallModel => self.config.small_model.clone(),
+            Field::SmallModel => self.config.background.clone(),
             Field::Context if self.config.context_tokens == 0 => String::new(),
             Field::Context => self.config.context_tokens.to_string(),
             Field::Transport => self.config.transport.clone(),
@@ -293,7 +293,7 @@ impl App {
         let defaults = Config::default();
         match field {
             Field::Model => self.config.model = value.unwrap_or_default(),
-            Field::SmallModel => self.config.small_model = value.unwrap_or_default(),
+            Field::SmallModel => self.config.background = value.unwrap_or_default(),
             Field::Context => {
                 self.config.context_tokens = value.and_then(|v| v.parse().ok()).unwrap_or(0)
             }
@@ -521,7 +521,7 @@ fn save(app: &mut App, path: &std::path::Path) {
         .config
         .validate()
         .and_then(|_| serialize(&app.config))
-        .and_then(|bytes| crate::auth::write_private(path, &bytes));
+        .and_then(|bytes| crate::store::write_private(path, &bytes));
     match result {
         Ok(()) => {
             let transport_changed = app.config.transport != app.saved.transport;
@@ -549,7 +549,7 @@ fn tilde(path: &std::path::Path) -> String {
 
 /// Interactive editor. Runs on a blocking thread; catalog refreshes use the runtime handle.
 pub fn run(runtime: tokio::runtime::Handle) -> Result<()> {
-    let path = crate::config::state_dir()?.join("config.json");
+    let path = crate::store::config_path()?;
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         bail!(
             "byoclaude config needs an interactive terminal; edit {} directly",

@@ -17,7 +17,7 @@ pub struct Model {
 }
 
 fn cache_path() -> Result<std::path::PathBuf> {
-    Ok(crate::config::state_dir()?.join("models.json"))
+    Ok(crate::store::cache_dir()?.join("models.json"))
 }
 
 pub fn parse(catalog: &Value) -> Result<Vec<Model>> {
@@ -64,7 +64,7 @@ pub async fn fetch() -> Result<Vec<Model>> {
     }
     let models = parse(&response.json().await?)?;
     if let Ok(path) = cache_path() {
-        let _ = crate::auth::write_private(&path, &serde_json::to_vec_pretty(&models)?);
+        let _ = crate::store::write_private(&path, &serde_json::to_vec_pretty(&models)?);
     }
     Ok(models)
 }

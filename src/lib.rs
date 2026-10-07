@@ -7,4 +7,5 @@ pub mod request;
 pub mod response;
 pub mod settings;
 pub mod sse;
+pub mod store;
 pub mod upstream;

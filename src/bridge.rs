@@ -41,6 +41,7 @@ pub struct Bridge {
 pub async fn serve(port: u16) -> Result<()> {
     let dir = crate::config::state_dir()?;
     let key = load_or_create_key(&dir)?;
+    crate::store::private_dir(&crate::store::logs_dir()?)?;
     let config = crate::config::load()?;
     let http = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
@@ -60,7 +61,7 @@ pub async fn serve(port: u16) -> Result<()> {
         active: Arc::new(tokio::sync::Semaphore::new(ACTIVE_REQUEST_LIMIT)),
         upstream: upstream.clone(),
         models: RwLock::new(crate::catalog::cached().unwrap_or_default()),
-        log: Some(dir.join("bridge.log")),
+        log: Some(crate::store::log_path()?),
         shutdown: Arc::new(tokio::sync::Notify::new()),
     });
     upstream.warm();

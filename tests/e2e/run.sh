@@ -21,12 +21,13 @@ trap cleanup EXIT
 
 far=$(( $(date +%s) + 86400 ))
 umask 077
-cat > "$home/chatgpt.json" <<JSON
-{"access_token":"mock-access","refresh_token":"mock-refresh","id_token":"x","client_id":"mock-client",
- "subject":"mock","email":null,"scopes":["chatgpt.tokens.use.direct"],"expires_at":$far,"earliest_refresh_at":0}
+cat > "$home/auth.json" <<JSON
+{"openai":{"access_token":"mock-access","refresh_token":"mock-refresh","id_token":"x","client_id":"mock-client",
+ "subject":"mock","email":null,"scopes":["chatgpt.tokens.use.direct"],"expires_at":$far,"earliest_refresh_at":0}}
 JSON
 echo "{\"upstream_base_url\":\"http://127.0.0.1:$mock_port/v1\"}" > "$home/config.json"
-cat > "$home/models.json" <<JSON
+mkdir -m 700 "$home/cache"
+cat > "$home/cache/models.json" <<JSON
 [{"slug":"mock-main","display_name":"Mock Main","description":"","context_window":272000,"effort_levels":["low","medium","high"],"default_effort":"low","listed":true},
  {"slug":"mock-luna","display_name":"Mock Luna","description":"","context_window":272000,"effort_levels":["low"],"default_effort":"low","listed":true}]
 JSON
@@ -55,7 +56,7 @@ blocks = [b for e in events if e.get("type") == "assistant" for b in e["message"
 results = [e for e in events if e.get("type") == "user"]
 final = next((e for e in events if e.get("type") == "result"), {})
 mock = [json.loads(l) for l in open(f"{work}/mock.log")]
-bridge = [json.loads(l) for l in open(f"{work}/home/bridge.log")]
+bridge = [json.loads(l) for l in open(f"{work}/home/logs/bridge.log")]
 checks = {
     "thinking shown": any(b["type"] == "thinking" and "Planning" in b.get("thinking", "") for b in blocks),
     "tool ran": any("mock-ok" in json.dumps(e) for e in results),

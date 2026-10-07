@@ -41,7 +41,9 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    byoclaude::store::migrate()?;
+    match cli.command {
         Command::Login { provider } => {
             anyhow::ensure!(
                 provider == "openai" || provider == "chatgpt",
