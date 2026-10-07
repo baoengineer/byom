@@ -19,7 +19,7 @@ Local servers make good real-provider checks: Ollama serves both the Anthropic a
 
 - Keep intake tolerant. A new or unknown field from Claude Code must never fail a request; drop or degrade it and add a test.
 - Never log prompt or response content, and never read credentials belonging to other tools.
-- Relayed Claude requests must stay byte for byte as Claude Code sent them.
+- Relayed Claude requests keep Claude Code's body and headers; only hop-by-hop and compression headers and the bridge key are dropped.
 - New built-in providers need a documented API and terms that allow use from third-party coding tools. No client impersonation.
 - Behavior of the ChatGPT plan route goes in [docs/PROVIDER.md](docs/PROVIDER.md), with only what was observed or documented by OpenAI.
 - When Claude Code changes its request shape, capture a request against a local endpoint with synthetic content and add it under `tests/fixtures/`.

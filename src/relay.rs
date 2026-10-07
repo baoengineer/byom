@@ -11,8 +11,10 @@ use serde_json::Value;
 
 use crate::providers::{Auth, Provider};
 
-/// Headers that describe one hop, not the message.
+/// Headers that describe one hop, not the message. Compression is negotiated per hop too:
+/// the bridge reads usage from the stream, and loopback gains nothing from compression.
 const HOP: &[&str] = &[
+    "accept-encoding",
     "host",
     "connection",
     "content-length",
@@ -234,6 +236,7 @@ mod tests {
             (BRIDGE_KEY_HEADER, "k"),
             ("anthropic-beta", "b"),
             ("host", "127.0.0.1"),
+            ("accept-encoding", "gzip, br"),
         ]);
         let body = Bytes::from_static(br#"{"model":"claude-opus-5-5",  "x":1}"#);
         let req = Outbound {
@@ -255,6 +258,7 @@ mod tests {
         assert_eq!(out["authorization"], "Bearer sk-ant-oat-x");
         assert_eq!(out["anthropic-beta"], "b");
         assert!(out.get(BRIDGE_KEY_HEADER).is_none() && out.get("host").is_none());
+        assert!(out.get("accept-encoding").is_none());
         assert_eq!(sent, body);
     }
 

@@ -23,7 +23,7 @@ If a model fails before producing output and `fallbacks` names alternatives, the
 
 ## The Claude relay
 
-When Claude Code is signed in (`claude auth status --json` reports `loggedIn`) and `relay` is on, the launcher leaves Claude Code's own credential in place and sends the bridge key in `x-byoclaude-key` through `ANTHROPIC_CUSTOM_HEADERS`. Claude requests reach Anthropic byte for byte, with Claude Code's `Authorization`. Other Anthropic API paths Claude Code calls are passed through the same way. With the relay off or no Claude sign-in, the launcher sets `ANTHROPIC_AUTH_TOKEN` to the bridge key, hides Claude rows, and points every slot at other providers.
+When Claude Code is signed in (`claude auth status --json` reports `loggedIn`) and `relay` is on, the launcher leaves Claude Code's own credential in place and sends the bridge key in `x-byoclaude-key` through `ANTHROPIC_CUSTOM_HEADERS`. Claude requests reach Anthropic with the body unchanged and Claude Code's headers, including its `Authorization`; only hop-by-hop and compression headers and `x-byoclaude-key` are dropped. Other Anthropic API paths Claude Code calls are passed through the same way. With the relay off or no Claude sign-in, the launcher sets `ANTHROPIC_AUTH_TOKEN` to the bridge key, hides Claude rows, and points every slot at other providers.
 
 ## Launcher (`launch.rs`)
 

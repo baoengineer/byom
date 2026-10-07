@@ -9,7 +9,7 @@ Claude Code stays unmodified. Its tools, subagents, hooks, MCP servers, skills, 
 ```text
 claude (official, signed in as usual)
   ▼
-byoclaude router (127.0.0.1) ─┬─ claude-*        → Anthropic, relayed unmodified on Claude Code's own sign-in
+byoclaude router (127.0.0.1) ─┬─ claude-*        → Anthropic, relayed on Claude Code's own sign-in
                               ├─ openai/*        → ChatGPT plan (Sign in with ChatGPT)
                               ├─ zai/*, kimi/*, minimax/*, deepseek/*, openrouter/*, ollama/*, lmstudio/*
                               │                  → Anthropic-compatible APIs, forwarded
@@ -50,7 +50,7 @@ Inside Claude Code, `/model` lists every model you can use. Start on a specific 
 
 | Provider | ID | Sign-in | Notes |
 |---|---|---|---|
-| Anthropic (Claude) | `anthropic` | Claude Code's own sign-in, or an API key | Relayed unmodified; see below |
+| Anthropic (Claude) | `anthropic` | Claude Code's own sign-in, or an API key | Relayed as sent; see below |
 | OpenAI ChatGPT plan | `openai` | Sign in with ChatGPT | Plus or Pro; per-app usage cap |
 | Z.ai GLM Coding Plan | `zai` | API key | Coding Plan is for supported coding tools such as Claude Code |
 | Kimi For Coding | `kimi` | API key | Kimi Code membership |
@@ -74,7 +74,7 @@ byoclaude never imitates another client, reads another tool's credentials, pools
 
 ## Claude and other models together
 
-When Claude Code is signed in to Claude, byoclaude relays Claude requests to Anthropic exactly as Claude Code sent them, with Claude Code's own credential, so Claude keeps working as before and the other models are added alongside. byoclaude stores nothing from that sign-in. Anthropic has not explicitly approved relaying subscription traffic through a local proxy; the first run says so. To keep Claude Code talking to Anthropic directly and use byoclaude only for other models, turn the relay off:
+When Claude Code is signed in to Claude, byoclaude relays Claude requests to Anthropic as Claude Code sent them: the same body and headers, with Claude Code's own credential, minus only transport headers (connection and compression) and byoclaude's own key, so Claude keeps working as before and the other models are added alongside. byoclaude stores nothing from that sign-in. Anthropic has not explicitly approved relaying subscription traffic through a local proxy; the first run says so. To keep Claude Code talking to Anthropic directly and use byoclaude only for other models, turn the relay off:
 
 ```sh
 byoclaude config set relay false

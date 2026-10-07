@@ -492,7 +492,7 @@ pub fn claude_signed_in() -> bool {
             .is_none_or(|p| p == "firstParty")
 }
 
-const RELAY_NOTE: &str = "byoclaude: Claude models in this session reach Anthropic through byoclaude's local relay, using Claude Code's own sign-in. Requests and responses pass through unmodified, but Anthropic has not explicitly approved relaying subscription traffic. To keep Claude Code talking to Anthropic directly, run: byoclaude config set relay false";
+const RELAY_NOTE: &str = "byoclaude: Claude models in this session reach Anthropic through byoclaude's local relay, using Claude Code's own sign-in. Request bodies and Claude Code's headers pass through unchanged, but Anthropic has not explicitly approved relaying subscription traffic. To keep Claude Code talking to Anthropic directly, run: byoclaude config set relay false";
 
 /// Print the relay note once per state directory.
 fn relay_note() {

@@ -83,7 +83,7 @@ const BUILTINS: &[Builtin] = &[
         base_url: "https://api.anthropic.com",
         auth: Auth::ClaudeCode,
         signup: "https://claude.com/claude-code",
-        note: "Uses Claude Code's own sign-in; requests are relayed unmodified.",
+        note: "Uses Claude Code's own sign-in; requests are relayed as Claude Code sent them.",
         models_dev: "anthropic",
     },
     Builtin {
