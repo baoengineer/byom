@@ -6,6 +6,7 @@ pub mod chat;
 pub mod config;
 pub mod doctor;
 pub mod launch;
+pub mod panel;
 pub mod providers;
 pub mod relay;
 pub mod request;

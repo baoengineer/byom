@@ -495,7 +495,7 @@ pub fn claude_signed_in() -> bool {
 const RELAY_NOTE: &str = "byoclaude: Claude models in this session reach Anthropic through byoclaude's local relay, using Claude Code's own sign-in. Request bodies and Claude Code's headers pass through unchanged, but Anthropic has not explicitly approved relaying subscription traffic. To keep Claude Code talking to Anthropic directly, run: byoclaude config set relay false";
 
 /// Print the relay note once per state directory.
-fn relay_note() {
+pub fn relay_note() {
     let Ok(marker) = crate::store::home().map(|h| h.join(".relay-note-shown")) else {
         return;
     };
@@ -506,28 +506,20 @@ fn relay_note() {
     let _ = crate::store::write_private(&marker, b"");
 }
 
-/// Launch Claude Code against the local bridge.
-pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
-    let config = crate::config::load()?;
-    let relay = config.relay && claude_signed_in();
-    // Any usable provider is enough; the plan reports when there is none.
-    let models = crate::catalog::load().await.unwrap_or_default();
-    if !crate::catalog::roster_exists() {
-        crate::catalog::refresh(&config).await;
-    }
-    let plan = plan(
-        &config,
-        &models,
-        &crate::catalog::roster_cached(),
-        model,
-        relay,
-    )?;
-    let key = ensure_bridge(&client()?).await?;
-    if relay {
-        relay_note();
-    }
+/// Start the bridge if needed and return its key.
+pub async fn bridge_key() -> Result<String> {
+    ensure_bridge(&client()?).await
+}
+
+/// The `claude` command for a plan: sanitized environment, the bridge's base URL and key,
+/// model slots, and `--settings` with the model picker rows. Arguments added later follow.
+pub fn claude_command(
+    plan: &Plan,
+    key: &str,
+    plugin: Option<&std::path::Path>,
+) -> std::process::Command {
     let mut command = std::process::Command::new("claude");
-    if relay {
+    if plan.relay {
         sanitize_relay(&mut command);
     } else {
         sanitize_claude(&mut command);
@@ -537,20 +529,18 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         Ok(existing) if !existing.trim().is_empty() => format!("{existing}\n{bridge_header}"),
         _ => bridge_header,
     };
-    let plugin = crate::skill::prepare(&plan.rows)?;
+    command.arg("--settings").arg(plan.settings.to_string());
+    if let Some(plugin) = plugin {
+        command.arg("--plugin-dir").arg(plugin);
+    }
     command
-        .arg("--settings")
-        .arg(plan.settings.to_string())
-        .arg("--plugin-dir")
-        .arg(&plugin)
-        .args(args)
         .env("ANTHROPIC_BASE_URL", format!("http://127.0.0.1:{}", port()))
         .env("ANTHROPIC_CUSTOM_HEADERS", headers)
         // Tool search defers tool definitions that non-Claude models never receive.
         .env("ENABLE_TOOL_SEARCH", "false");
-    if !relay {
+    if !plan.relay {
         command
-            .env("ANTHROPIC_AUTH_TOKEN", &key)
+            .env("ANTHROPIC_AUTH_TOKEN", key)
             .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
             // claude.ai connectors need claude.ai auth, which the bridge key replaces; turning
             // them off also removes Claude Code's warning about it.
@@ -574,6 +564,32 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
             .env("CLAUDE_CODE_MAX_CONTEXT_TOKENS", tokens.to_string())
             .env("CLAUDE_CODE_AUTO_COMPACT_WINDOW", tokens.to_string());
     }
+    command
+}
+
+/// Launch Claude Code against the local bridge.
+pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
+    let config = crate::config::load()?;
+    let relay = config.relay && claude_signed_in();
+    // Any usable provider is enough; the plan reports when there is none.
+    let models = crate::catalog::load().await.unwrap_or_default();
+    if !crate::catalog::roster_exists() {
+        crate::catalog::refresh(&config).await;
+    }
+    let plan = plan(
+        &config,
+        &models,
+        &crate::catalog::roster_cached(),
+        model,
+        relay,
+    )?;
+    let key = ensure_bridge(&client()?).await?;
+    if relay {
+        relay_note();
+    }
+    let plugin = crate::skill::prepare(&plan.rows)?;
+    let mut command = claude_command(&plan, &key, Some(&plugin));
+    command.args(args);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

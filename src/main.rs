@@ -63,6 +63,38 @@ enum Command {
         #[arg(short = 'n', long, default_value_t = 20)]
         lines: usize,
     },
+    /// Ask several models one question, or one change with --attempt; a judge compares them.
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Panel {
+        #[command(subcommand)]
+        action: Option<PanelAction>,
+        /// The question, self-contained; "-" reads it from stdin.
+        #[arg(required = true)]
+        question: Option<String>,
+        /// Each panelist makes the change in its own git worktree; patches and test results
+        /// are collected.
+        #[arg(long)]
+        attempt: bool,
+        /// Panel members, comma-separated (default: panel.models, or picked automatically).
+        #[arg(long, value_delimiter = ',')]
+        models: Vec<String>,
+        /// Judge model (default: panel.judge, or picked from a provider not on the panel).
+        #[arg(long)]
+        judge: Option<String>,
+        /// Panel size when picking automatically (default: panel.size).
+        #[arg(short = 'n', long)]
+        size: Option<u32>,
+        /// Test command, run in each attempt's worktree (default: panel.test_command).
+        #[arg(long)]
+        test: Option<String>,
+        /// Seconds each panelist, the judge and each test run may take (default:
+        /// panel.timeout_secs).
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// Print the full panel record as JSON instead of the verdict.
+        #[arg(long)]
+        json: bool,
+    },
     #[command(hide = true, name = "auth-status")]
     AuthStatus,
     /// Internal loopback bridge process.
@@ -83,6 +115,25 @@ enum ConfigAction {
     Unset { key: String },
     /// Print the config file path.
     Path,
+}
+
+#[derive(Subcommand)]
+enum PanelAction {
+    /// List recorded panels, newest first.
+    List,
+    /// Print a recorded panel's verdict, patches and ledger.
+    Show {
+        id: String,
+        /// The full panel record as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Apply an attempt's patch to the repository: the winner, or the named panelist.
+    Apply {
+        id: String,
+        /// Panelist label (A, B, ...) or model ID.
+        panelist: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -125,6 +176,37 @@ async fn main() -> Result<()> {
         Command::Doctor => byoclaude::doctor::run().await,
         Command::Status => byoclaude::launch::status().await,
         Command::Stop => byoclaude::launch::stop().await,
+        Command::Panel {
+            action: Some(action),
+            ..
+        } => match action {
+            PanelAction::List => byoclaude::panel::list(),
+            PanelAction::Show { id, json } => byoclaude::panel::show(&id, json),
+            PanelAction::Apply { id, panelist } => byoclaude::panel::apply(&id, panelist).await,
+        },
+        Command::Panel {
+            action: None,
+            question,
+            attempt,
+            models,
+            judge,
+            size,
+            test,
+            timeout,
+            json,
+        } => {
+            byoclaude::panel::run(byoclaude::panel::Options {
+                question: question.unwrap_or_default(),
+                attempt,
+                models,
+                judge,
+                size,
+                test,
+                timeout,
+                json,
+            })
+            .await
+        }
         Command::Logs { lines } => byoclaude::roster::print_logs(lines),
         Command::Bridge { port } => byoclaude::bridge::serve(port).await,
     }

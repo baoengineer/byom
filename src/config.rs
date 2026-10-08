@@ -33,6 +33,8 @@ pub struct Config {
     pub providers: BTreeMap<String, ProviderConfig>,
     /// Models to try, in order, when a model fails before producing output.
     pub fallbacks: BTreeMap<String, Vec<String>>,
+    /// Defaults for `byoclaude panel`.
+    pub panel: PanelConfig,
     /// Accepted from 0.1.0 configs and ignored.
     #[serde(rename = "provider", skip_serializing)]
     #[doc(hidden)]
@@ -61,6 +63,33 @@ pub struct ProviderConfig {
     pub disabled: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct PanelConfig {
+    /// Panel model IDs; empty picks ready models from distinct providers.
+    pub models: Vec<String>,
+    /// Judge model ID; empty picks one from a provider not on the panel.
+    pub judge: String,
+    /// Panel size when models are picked automatically.
+    pub size: u32,
+    /// Command run in each attempt's worktree, such as `cargo test`.
+    pub test_command: String,
+    /// Time limit for each panelist, the judge and each test run.
+    pub timeout_secs: u64,
+}
+
+impl Default for PanelConfig {
+    fn default() -> Self {
+        Self {
+            models: Vec::new(),
+            judge: String::new(),
+            size: 3,
+            test_command: String::new(),
+            timeout_secs: 900,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -75,6 +104,7 @@ impl Default for Config {
             behaves_as: "claude-opus-5-5".to_owned(),
             providers: BTreeMap::new(),
             fallbacks: BTreeMap::new(),
+            panel: PanelConfig::default(),
             legacy_provider: None,
         }
     }
@@ -147,9 +177,20 @@ impl Config {
             &self.aliases.opus,
             &self.aliases.sonnet,
             &self.aliases.haiku,
+            &self.panel.judge,
         ];
-        if names.iter().any(|n| n.trim() != n.as_str()) {
+        if names
+            .into_iter()
+            .chain(&self.panel.models)
+            .any(|n| n.trim() != n.as_str())
+        {
             bail!("model names must not have surrounding whitespace");
+        }
+        if self.panel.size < 2 {
+            bail!("panel.size must be at least 2");
+        }
+        if self.panel.timeout_secs == 0 {
+            bail!("panel.timeout_secs must be greater than 0");
         }
         if self
             .legacy_provider
@@ -230,7 +271,7 @@ fn parse_value(key: &str, value: &str) -> serde_json::Value {
         _ => value
             .parse::<u64>()
             .ok()
-            .filter(|_| leaf == "context_tokens")
+            .filter(|_| matches!(key, "context_tokens" | "panel.size" | "panel.timeout_secs"))
             .map(Value::from)
             .unwrap_or_else(|| Value::String(value.into())),
     }
@@ -383,6 +424,41 @@ mod tests {
             parse_value("fallbacks.openai/gpt-6-astra", "openai/gpt-5.6-sol"),
             serde_json::json!(["openai/gpt-5.6-sol"])
         );
+        assert_eq!(
+            parse_value("panel.models", "openai/gpt-5.6-sol,kimi/kimi-k3"),
+            serde_json::json!(["openai/gpt-5.6-sol", "kimi/kimi-k3"])
+        );
+        assert_eq!(parse_value("panel.size", "4"), serde_json::json!(4));
+        assert_eq!(
+            parse_value("panel.timeout_secs", "600"),
+            serde_json::json!(600)
+        );
+        assert_eq!(
+            parse_value("panel.test_command", "cargo test"),
+            serde_json::json!("cargo test")
+        );
+        assert_eq!(
+            parse_value("panel.judge", "zai/glm-5"),
+            serde_json::json!("zai/glm-5")
+        );
+    }
+
+    #[test]
+    fn panel_settings_default_and_validate() {
+        let config = read_json(r#"{"panel":{"models":["openai/a","kimi/b"],"judge":"zai/c","test_command":"make test"}}"#).unwrap();
+        assert_eq!(config.panel.models, ["openai/a", "kimi/b"]);
+        assert_eq!(config.panel.size, 3);
+        assert_eq!(config.panel.timeout_secs, 900);
+        for json in [
+            r#"{"panel":{"size":1}}"#,
+            r#"{"panel":{"timeout_secs":0}}"#,
+            r#"{"panel":{"judge":" x"}}"#,
+            r#"{"panel":{"models":["a "]}}"#,
+            r#"{"panel":{"size":"3"}}"#,
+            r#"{"panel":{"unknown":1}}"#,
+        ] {
+            assert!(read_json(json).is_err(), "accepted {json:?}");
+        }
     }
 
     #[test]
