@@ -214,6 +214,8 @@ section { padding-block: 72px; border-top: 1px solid var(--line); }
 .tx .arg { color: var(--t-dim); }
 .tx .done { padding-left: 1.2em; }
 .tx p + p { margin-top: 8px; }
+.tx pre { margin: 12px 0 0; font: inherit; color: var(--t-dim); white-space: pre; }
+.tx b { color: var(--t-head); font-weight: 700; }
 
 /* Start */
 .steps { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
@@ -379,6 +381,35 @@ footer .row nav { display: flex; gap: 18px; }
             <p class="done arg">⎿ List every caller of Pool::release in this repository.</p>
             <p><span class="dot">●</span> Both point at one issue: <span class="tool">release()</span> returns the socket to the pool before its state is cleared.</p>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel">
+      <div class="split">
+        <div class="sec-head">
+          <h2>Or ask a panel.</h2>
+          <p class="lede">When being wrong is costly, <code>byoclaude panel</code> puts the question to several models at once, on the plans you already pay for. Each one answers independently as a full Claude Code agent that can read the repo and run your tests. A judge from another provider compares the reports without seeing model names, and Claude gets the verdict.</p>
+        </div>
+        <div>
+          <div class="term">
+            <div class="term-bar"><span>zsh · ~/myapp</span><span>panel</span></div>
+            <div class="term-body tx">
+              <span class="u"><span class="g">$</span> byoclaude panel "Is the retry logic in src/pool.rs safe under concurrent release?"</span>
+              <p class="arg">panel: openai/gpt-6-astra, kimi/k3, deepseek/deepseek-v4-pro</p>
+              <p class="arg">judge: claude-opus-5-5 (relay)</p>
+              <p class="arg">3 panelists running · 3 reports · judging</p>
+              <p><b>Agreement</b> (all three): release() can return a connection to the pool twice when a retry races it.</p>
+              <p><b>Conflict</b>: does retry() need the pool lock?<br><span class="arg">gpt-6-astra: yes, it reads idle before locking (src/pool.rs:88)<br>k3: no, idle is only written under the lock</span><br>Judge: gpt-6-astra is right; line 88 reads idle unlocked.</p>
+              <p><b>Recommendation</b>: take the lock before reading idle in retry(), and add a concurrent release test. Confidence: high.</p>
+<pre>model                     time   tokens  cost
+openai/gpt-6-astra        2m40s  51k     plan
+kimi/k3                   3m12s  64k     $0.06
+deepseek/deepseek-v4-pro  2m55s  58k     $0.03
+claude-opus-5-5 (judge)   1m20s  39k     plan</pre>
+            </div>
+          </div>
+          <p class="hint"><span>Abbreviated and illustrative. Add <code>--attempt</code> and each model makes the change in its own git worktree; <code>byoclaude panel apply</code> takes the winner.</span></p>
         </div>
       </div>
     </section>

@@ -75,3 +75,52 @@ Boundaries: never imitate another client, never read other tools' credentials, n
 - [x] Step 5: session plugin with the byoclaude skill and one agent per model (`byoclaude:<model>`), since the Agent tool's `model` field accepts only Claude aliases; `byoclaude --skill`.
 - [x] Step 6: OpenAI Chat Completions adapter and built-ins (Groq, Mistral, Gemini, Cerebras, Together, xAI); custom `openai-chat` providers. Verified with real Claude Code tool round trips against Ollama on both the Anthropic and Chat protocols. Fallback chains applied before output.
 - [x] Step 7: tabbed `byoclaude config` (Models, Providers, Roles, Usage) and token usage for every route, including forwarded streams.
+
+## Next: panels (0.3.0)
+
+A panel puts one question, or one change, to several models at once, has a separate judge compare the results, and hands Claude a structured verdict. It is OpenRouter Fusion's panel-judge-writer shape, with two differences only byoclaude can offer: panelists run on the plans the user already pays for, and each panelist is a full Claude Code agent that can read the repository and run tests to back its claims.
+
+```text
+Claude (or the user) ── byoclaude panel "question" ──▶ panel run
+                                                         │ N headless Claude Code agents, one per model,
+                                                         │ mixed providers, in parallel
+                       ┌─────────────────────────────────┼──────────────────────────────┐
+                 opinion mode                                                   attempt mode (--attempt)
+       read-only tools; answer with evidence                       each agent edits its own git worktree;
+       (file:line, command output)                                 byoclaude collects its diff and runs the tests
+                       └────────────────▶ judge (another provider, anonymized reports) ◀─┘
+                              agreement · conflicts · unique findings · blind spots
+                              attempts: ranking, winner, what to merge
+                                                         │
+                       verdict printed for Claude; ledger in ~/.byoclaude/panels/<id>/
+                                                         │
+                       Claude writes the answer, or applies the winner with `byoclaude panel apply`
+```
+
+### Decisions (settled 2026-10-09)
+
+| # | Topic | Decision |
+|---|---|---|
+| 17 | Surface | Escalation, not autopilot. Claude calls a panel when being wrong is costly (reviews, risky changes, debugging hypotheses, design calls) or when the user asks. No `/model` row, no per-turn fan-out, no automatic hook gates. |
+| 18 | Mechanism | A CLI command, `byoclaude panel`, that runs each panelist as a headless `claude -p` through the bridge. Claude runs it with Bash (in the background for long panels); the user can run the same command in a terminal. Deterministic orchestration in the binary, not a procedure Claude must follow step by step. |
+| 19 | Panelists | Full Claude Code agents with `--model <id>`, the session's settings and model picker rows, no byoclaude plugin (no nested panels; `BYOCLAUDE_PANEL=1` refuses one), `--strict-mcp-config`, `--no-session-persistence`, structured reports through `--json-schema`. |
+| 20 | Modes | Opinion (default): tools Read, Grep, Glob, WebSearch, WebFetch and read-only Bash (`git status/diff/log/show`, `ls`, `rg`, `grep`, `find`, `cat`, `head`, `tail`, `wc`) plus the configured test command. Attempt (`--attempt`): also Edit and Write with `acceptEdits`, inside a detached git worktree per panelist that starts from HEAD plus the current uncommitted diff. |
+| 21 | Selection | `--models` or `panel.models`; otherwise automatic: `panel.size` (default 3) ready models from distinct providers, the highest-priced model of each provider first, local models last, the Claude relay included. Capped, keyless and offline models are skipped and reported. |
+| 22 | Judge | `--judge` or `panel.judge`; otherwise the strongest ready model from a provider not on the panel (Claude via the relay when Claude is off the panel). Reports reach the judge as Panelist A, B, C, without model names, to limit brand and style bias. The judge has read-only tools to check cited evidence. |
+| 23 | Verdict | Opinion: summary, agreement, conflicts with each position and an assessment, unique findings, blind spots, recommendation, confidence. Attempt: also a ranking, the winner (or none), and what to merge from the others. Printed as Markdown; `--json` prints the full record. |
+| 24 | Attempts | byoclaude, not the panelist, collects each worktree's diff as a patch and runs `panel.test_command` (or `--test`) in it, so the judge sees real test results. Worktrees are removed afterwards; patches stay in the ledger. `byoclaude panel apply <id> [panelist]` applies the winner (or the named patch) with `git apply --3way`. Nothing is applied automatically. |
+| 25 | Ledger | `~/.byoclaude/panels/<id>/panel.json`: question, mode, members, judge, per-member status, time, tokens and estimated cost (plan routes marked as plan usage), the verdict, and whether a patch was applied. `byoclaude panel list` and `panel show <id>`. |
+| 26 | Limits | Per-member timeout `panel.timeout_secs` (default 900); a member that fails or times out is reported and the panel continues with the rest; a panel needs at least two reports to judge. |
+| 27 | Claude-facing | The guide gains a "panels" section (when a panel is worth its cost, running it in the background, reading the verdict, applying a winner), and the session plugin adds a `/byoclaude:panel` command. |
+| 28 | Release | 0.3.0. |
+
+As built, against decisions 19 to 24: panelists and the judge run with `--restricted`, so they ignore user, project and local settings rather than inheriting the session's, and their file tools stay inside the working directories. Opinion members and the judge use `--permission-mode dontAsk`, attempt members `acceptEdits` without bare Edit or Write rules. WebFetch is not offered, and deny rules block the write and exec flags of the read-only commands. Local models are not checked for reachability, so "offline" is not a skip reason. `panel apply` tries a plain `git apply` first and falls back to `--3way`.
+
+### Out of scope for 0.3.0
+
+- Panels as a model in `/model`, fan-out on every turn, hook-triggered gates.
+- Merging several attempts automatically; the judge suggests, Claude or the user merges.
+
+### Panels status
+
+- [x] `byoclaude panel` (opinion and attempt modes), automatic selection, anonymized judge, ledger, `panel list/show/apply`, guide section and `/byoclaude:panel`. Verified with a real panel on the Claude relay (two panelists, an off-panel judge) and against a fake `claude` in `tests/panel_contract.rs`.

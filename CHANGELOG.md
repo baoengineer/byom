@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+Panels.
+
+- `byoclaude panel "<question>"` puts one question to several models at once, each a headless Claude Code agent that can read the repository and run tests; a judge from another provider compares the anonymized reports and prints a verdict: agreement, conflicts, unique findings, blind spots, recommendation, confidence.
+- `--attempt`: each panelist makes the change in its own git worktree; byoclaude collects the patches and runs the test command when one is set, and the verdict ranks the attempts and names a winner. `byoclaude panel apply <id> [panelist]` applies one with `git apply`, falling back to a three-way merge when the tree has moved on.
+- Automatic selection of ready models from distinct providers and of a judge from a provider not on the panel, or `--models` and `--judge`.
+- Ledger in `~/.byoclaude/panels/<id>/` with each member's status, time, tokens and estimated cost (plan usage marked); `panel list`, `panel show <id>`, `--json`.
+- Settings: `panel.models`, `panel.judge`, `panel.size`, `panel.test_command`, `panel.timeout_secs`.
+- The guide gains a panels section, and the session plugin a `/byoclaude:panel` command.
+
 ## 0.2.0
 
 Multi-provider sessions.
