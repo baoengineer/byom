@@ -417,8 +417,12 @@ pub fn plan(
     let opus = follow(&config.aliases.opus);
     let sonnet = follow(&config.aliases.sonnet);
     let subagent = pick(&config.subagent);
+    // The window applies to every model in the session, so it is set only when no Claude model
+    // can be switched to; otherwise an overflowing model compacts on "prompt is too long".
     let context_tokens = if config.context_tokens > 0 {
         Some(config.context_tokens)
+    } else if claude {
+        None
     } else {
         model.as_deref().filter(|m| !is_claude(m)).map(|m| {
             let (provider, name) = crate::providers::split(m);
@@ -687,7 +691,7 @@ mod tests {
         assert_eq!(plan.settings["modelPicker"]["replaceBuiltInOptions"], false);
         // No ChatGPT sign-in: Claude alone still works.
         assert!(super::plan(&crate::config::Config::default(), &[], &[], None, true).is_ok());
-        // A GPT main model gets its window; Claude aliases stay native.
+        // A GPT main model keeps Claude Code's windows while Claude is available; aliases stay native.
         let plan = super::plan(
             &crate::config::Config::default(),
             &models,
@@ -697,7 +701,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.model.as_deref(), Some("openai/gpt-luna"));
-        assert_eq!(plan.context_tokens, Some(272_000));
+        assert_eq!(plan.context_tokens, None);
         assert_eq!(plan.sonnet, None);
     }
 

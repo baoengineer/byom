@@ -34,9 +34,9 @@ Requires macOS or Linux, [Claude Code](https://code.claude.com/docs/en/setup) (t
 Download a binary from [Releases](https://github.com/baoengineer/byom/releases), for example on an Apple silicon Mac:
 
 ```sh
-curl -LO https://github.com/baoengineer/byom/releases/latest/download/byom-v0.4.0-aarch64-apple-darwin.tar.gz
-tar xzf byom-v0.4.0-aarch64-apple-darwin.tar.gz
-mv byom-v0.4.0-aarch64-apple-darwin/byom ~/.local/bin/    # any directory on your PATH
+curl -LO https://github.com/baoengineer/byom/releases/latest/download/byom-v0.4.1-aarch64-apple-darwin.tar.gz
+tar xzf byom-v0.4.1-aarch64-apple-darwin.tar.gz
+mv byom-v0.4.1-aarch64-apple-darwin/byom ~/.local/bin/    # any directory on your PATH
 xattr -d com.apple.quarantine ~/.local/bin/byom             # macOS: the binary is not notarized
 ```
 

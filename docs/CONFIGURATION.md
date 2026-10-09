@@ -23,7 +23,7 @@ Settings live in `~/.byom/config.json` (or `$BYOM_HOME/config.json`). Edit them 
 | `relay` | Relay Claude models on Claude Code's own sign-in (default `false`; see [Claude models](../README.md#claude-models)) |
 | `fallbacks` | Models to try, in order, when a model fails before answering (plan cap, outage, missing key) |
 | `providers.<id>` | `name`, `api_key`, `base_url`, `protocol` (`anthropic` or `openai-chat`), `models`, `disabled` |
-| `context_tokens` | Compaction window for the main model; `0` uses the catalog value for non-Claude models and Claude Code's own for Claude |
+| `context_tokens` | Compaction window for the whole session. `0` uses the main model's catalog value when no Claude model is available, and Claude Code's own per-model windows when one is |
 | `transport` | ChatGPT plan transport: `auto` (WebSocket) or `http` |
 | `teams` | Turn on Claude Code's agent teams, so teammates can run on any model (default `false`) |
 | `behaves_as` | Claude model whose handling Claude Code applies to other models (default `claude-opus-5-5`) |

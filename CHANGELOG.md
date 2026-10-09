@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+
+- With Claude models available, a non-Claude main model no longer pins the session's compaction window to its own size, which made Claude models compact over and over after switching in `/model`.
+
 ## 0.4.0
 
 Renamed to byom, and the Claude relay is opt-in.

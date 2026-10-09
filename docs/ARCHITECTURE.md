@@ -27,7 +27,7 @@ The relay is opt-in (`relay`, default `false`). When it is on and Claude Code is
 
 ## Launcher (`launch.rs`)
 
-- Builds a plan: main, background (`haiku` slot), `opus`/`sonnet` aliases, subagent default, context window. With the relay, unset slots keep Claude Code's defaults.
+- Builds a plan: main, background (`haiku` slot), `opus`/`sonnet` aliases, subagent default, and a compaction window only when no Claude model is available (the window applies to every model in the session). With Claude models available, unset slots keep Claude Code's defaults.
 - Passes `--settings` with a `modelPicker` whose rows are every usable non-Claude model, each with `behavesAs` (default `claude-opus-5-5`) so Claude Code applies effort levels and thinking and accepts the ID. With the relay, rows are added to Claude Code's built-in list; without it they replace it.
 - Generates the session plugin (`skill.rs`) under `~/.byom/plugin` and passes `--plugin-dir`.
 - Disables tool search, since non-Claude models never receive deferred tools.
