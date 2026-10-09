@@ -54,6 +54,17 @@ byoclaude panel ──▶ select members + judge ──▶ claude -p --model <id
 - **Judge.** With at least two reports, a headless `claude -p` in the repository with read-only tools and a verdict schema compares the reports, labeled Panelist A, B, C without model names. Opinion verdict: summary, agreement, conflicts, unique findings, blind spots, recommendation, confidence. Attempt verdict adds a ranking, a winner (or none) and what to merge. Labels are mapped back to model IDs in the output and the ledger.
 - **Ledger.** `~/.byoclaude/panels/<id>/` (id: UTC timestamp plus a short suffix): `panel.json` with the question, mode, members (status, time, tokens, cost estimated from roster prices, or plan usage for the relay and the ChatGPT plan), judge, verdict and whether a patch was applied, plus raw outputs and patches. The verdict goes to stdout as Markdown with a ledger table; progress goes to stderr.
 
+## Session mod (`mod/hooks/byoclaude.js`)
+
+The session plugin carries a Claude Code mod, embedded in the binary from `mod/` and written to `plugin/hooks/` by `skill::prepare`. It drives `byoclaude panel` (found through `BYOCLAUDE_BIN`, which the launcher sets) and follows its stderr progress lines:
+
+- **Tool.** `$.tool.register` adds `panel`, which Claude sees as `mcp__byoclaude__panel`. With a surface to draw on, the call starts the panel from a `$.clock.after` callback, so it outlives the tool call, and returns at once; when the process exits, the verdict is submitted with `$.prompt.submit` and starts a turn once the session is idle. With no surface (`claude -p`), the call runs the panel inline and returns the verdict.
+- **Drawing.** An `AbovePrompt` line per running panel, refreshed every second while one runs, and a `Pane` (`byoclaude-panel`) with members, judge, the verdict and, after an attempt panel, Apply buttons that run `byoclaude panel apply`.
+- **Command.** `/panel` (`immediate`) starts a panel or opens the pane.
+- **Gate.** With `panel.gate` (the launcher sets `BYOCLAUDE_PANEL_GATE=1`), a `tool.call` hook on Bash holds risky commands and asks, through `$.ui.ask`, whether to run, ask a panel first (denied with a note to wait for the verdict), or refuse. The hook fails closed.
+
+`mod/tests/` holds the mod's tests, run with `claude plugin test mod`; `claude plugin validate mod` checks it.
+
 ## Catalog (`catalog.rs`)
 
 The roster combines each usable provider's model list (`/v1/models` or `/models`, by protocol), the ChatGPT account catalog, and models.dev metadata (context window, max output, reasoning, tools, images, price). Providers without a model list fall back to models.dev; providers listing more than 25 models offer only those named in `providers.<id>.models`. The roster is cached in `cache/roster.json`; `models --refresh`, `login` and `r` in `byoclaude config` rebuild it.

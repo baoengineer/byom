@@ -76,6 +76,8 @@ pub struct PanelConfig {
     pub test_command: String,
     /// Time limit for each panelist, the judge and each test run.
     pub timeout_secs: u64,
+    /// Ask before risky shell commands, offering a panel review first.
+    pub gate: bool,
 }
 
 impl Default for PanelConfig {
@@ -86,6 +88,7 @@ impl Default for PanelConfig {
             size: 3,
             test_command: String::new(),
             timeout_secs: 900,
+            gate: false,
         }
     }
 }
@@ -449,6 +452,8 @@ mod tests {
         assert_eq!(config.panel.models, ["openai/a", "kimi/b"]);
         assert_eq!(config.panel.size, 3);
         assert_eq!(config.panel.timeout_secs, 900);
+        assert!(!config.panel.gate);
+        assert!(read_json(r#"{"panel":{"gate":true}}"#).unwrap().panel.gate);
         for json in [
             r#"{"panel":{"size":1}}"#,
             r#"{"panel":{"timeout_secs":0}}"#,

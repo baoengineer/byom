@@ -10,6 +10,7 @@ Panels.
 - Ledger in `~/.byoclaude/panels/<id>/` with each member's status, time, tokens and estimated cost (plan usage marked); `panel list`, `panel show <id>`, `--json`.
 - Settings: `panel.models`, `panel.judge`, `panel.size`, `panel.test_command`, `panel.timeout_secs`.
 - The guide gains a panels section, and the session plugin a `/byoclaude:panel` command.
+- A Claude Code mod in each session (Claude Code 2.1.287 or later) makes panels native: an `mcp__byoclaude__panel` tool that returns at once and brings the verdict back as a message, a progress line above the prompt, a panel pane with Apply buttons, `/panel` that works while Claude is busy, and an opt-in gate before risky shell commands (`panel.gate`).
 
 ## 0.2.0
 

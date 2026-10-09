@@ -1,0 +1,8 @@
+{
+  "name": "byoclaude",
+  "version": "0.0.0-dev",
+  "description": "Development copy of the mod byoclaude writes into each session's plugin",
+  "author": {
+    "name": "byoclaude"
+  }
+}

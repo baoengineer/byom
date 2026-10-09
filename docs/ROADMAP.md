@@ -121,6 +121,15 @@ As built, against decisions 19 to 24: panelists and the judge run with `--restri
 - Panels as a model in `/model`, fan-out on every turn, hook-triggered gates.
 - Merging several attempts automatically; the judge suggests, Claude or the user merges.
 
+### Panels inside Claude Code (settled 2026-10-09)
+
+| # | Topic | Decision |
+|---|---|---|
+| 29 | Integration | A Claude Code mod in the session plugin, with `byoclaude panel` as the engine. Not an MCP server (no custom drawing, auto-backgrounded after two minutes), not channels (allowlisted plugins only), not a plugin workflow (its agents cannot be steered to the CLI's panel). |
+| 30 | Surfaces | A `panel` tool that returns at once in interactive sessions and submits the verdict as a prompt when done (inline in `-p`); a line above the prompt; a pane with Apply buttons; `/panel` with `immediate`. The Bash path and `/byoclaude:panel` stay for sessions where mods are off. |
+| 31 | Gate | Opt-in `panel.gate`: a fixed list of risky shell patterns, held with `$.ui.ask` (run, ask a panel first, refuse); fails closed. |
+
 ### Panels status
 
 - [x] `byoclaude panel` (opinion and attempt modes), automatic selection, anonymized judge, ledger, `panel list/show/apply`, guide section and `/byoclaude:panel`. Verified with a real panel on the Claude relay (two panelists, an off-panel judge) and against a fake `claude` in `tests/panel_contract.rs`.
+- [x] Session mod: panel tool, band, pane with Apply, `/panel`, gate. Verified in a real interactive session (tool returned at once, band and pane updated, verdict arrived as a new turn) and with `claude plugin test mod`.

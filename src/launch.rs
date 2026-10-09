@@ -590,6 +590,13 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     let plugin = crate::skill::prepare(&plan.rows)?;
     let mut command = claude_command(&plan, &key, Some(&plugin));
     command.args(args);
+    // The session mod starts panels with this binary and reads the gate setting.
+    if let Ok(exe) = std::env::current_exe() {
+        command.env("BYOCLAUDE_BIN", exe);
+    }
+    if config.panel.gate {
+        command.env("BYOCLAUDE_PANEL_GATE", "1");
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

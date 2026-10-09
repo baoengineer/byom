@@ -68,7 +68,11 @@ Worth the cost when being wrong is expensive:
 Not for routine edits, simple questions, or anything latency-sensitive. A panel takes
 minutes and runs several models.
 
-Run it with Bash in the background:
+Use the `mcp__byoclaude__panel` tool when this session has it. In an interactive session
+it returns at once: keep working, and the verdict arrives later as a message from
+byoclaude. The user sees progress above the prompt and in a panel pane (`/panel`).
+
+Without the tool, run it with Bash in the background:
 
 ```
 byoclaude panel "<self-contained question with paths and constraints>"
@@ -79,6 +83,7 @@ byoclaude panel "<self-contained question with paths and constraints>"
 - `--attempt` has each panelist try the change in its own git worktree; byoclaude collects
   each patch and runs the test command when one is set. Untracked files are not copied
   into the worktrees.
+- The tool takes the same choices as fields: `attempt`, `models`, `judge`, `size`, `test`.
 - `--models a,b,c` picks the panel, `--judge <id>` the judge, `--size <N>` the panel size,
   `--test "<cmd>"` the test command. By default byoclaude picks ready models from
   distinct providers.
@@ -119,6 +124,10 @@ Ask a byoclaude panel about: $ARGUMENTS
    and where you disagree. Name the models on the panel and the judge, and what it cost.
    Do not apply any patch without the user's go-ahead.
 "#;
+
+/// The session mod: the panel tool, `/panel`, the panel pane and the optional command gate.
+const MOD: &str = include_str!("../mod/hooks/byoclaude.js");
+const MOD_HOOKS: &str = include_str!("../mod/hooks/hooks.json");
 
 /// Agent name for a model ID: `openai/gpt-5.6-sol` becomes `openai-gpt-5-6-sol`.
 pub fn agent_name(model: &str) -> String {
@@ -166,11 +175,14 @@ pub fn prepare(rows: &[crate::launch::Row]) -> Result<PathBuf> {
             "name": "byoclaude",
             "version": env!("CARGO_PKG_VERSION"),
             "description": "Models from other providers in this Claude Code session",
+            "author": { "name": "byoclaude" },
         })
         .to_string(),
     )?;
     write("skills/byoclaude/SKILL.md", SKILL)?;
     write("commands/panel.md", PANEL_COMMAND)?;
+    write("hooks/hooks.json", MOD_HOOKS)?;
+    write("hooks/byoclaude.js", MOD)?;
     for row in rows {
         write(
             &format!("agents/{}.md", agent_name(&row.id)),
@@ -229,5 +241,14 @@ mod tests {
         assert!(PANEL_COMMAND.contains("\nargument-hint: <question>\n---\n"));
         assert!(PANEL_COMMAND.contains("$ARGUMENTS"));
         assert!(PANEL_COMMAND.contains("byoclaude panel \""));
+        assert!(GUIDE.contains("mcp__byoclaude__panel"));
+    }
+
+    #[test]
+    fn mod_ships_with_the_plugin() {
+        assert!(MOD_HOOKS.contains("\"./byoclaude.js\""));
+        assert!(MOD.contains("export function register(on)"));
+        assert!(MOD.contains("mcp__byoclaude__panel"));
+        assert!(MOD.contains("BYOCLAUDE_BIN"));
     }
 }

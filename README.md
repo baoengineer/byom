@@ -112,7 +112,18 @@ Panelists and the judge run in Claude Code's restricted mode: your Claude Code u
 
 By default byoclaude picks `panel.size` ready models from the model picker's roster, from different providers, the highest-priced model of each provider first and local models last, and a judge from a provider not on the panel. `--models a,b,c` and `--judge <id>` choose them yourself. A member that fails or times out is reported and the rest continue; a panel needs two reports to be judged. Each run is recorded in `~/.byoclaude/panels/<id>/` with every member's time, tokens and estimated cost (plan usage for Claude on the relay and the ChatGPT plan; cached input is priced at the full input rate, so estimates are upper bounds); `byoclaude panel list` lists them and `--json` prints the full record.
 
-A panel costs several model runs plus the judge's, and takes minutes. Inside a session, Claude calls one when being wrong is costly, or when you ask; `/byoclaude:panel <question>` does the same.
+A panel costs several model runs plus the judge's, and takes minutes. Inside a session, Claude calls one when being wrong is costly, or when you ask.
+
+### Panels inside Claude Code
+
+Each `byoclaude` session loads a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) (Claude Code 2.1.287 or later) that makes panels part of the session:
+
+- **A panel tool for Claude** (`mcp__byoclaude__panel`). In an interactive session it returns at once, so Claude keeps working; when the judge finishes, the verdict arrives as a new message.
+- **Progress while you work**: a line above the prompt (`panel <id> · opinion · 2/3 reports · 1m 12s`) and a pane with each panelist's state and time, then the verdict. After an attempt panel, the pane has an **Apply** button per patch.
+- **`/panel <question>`** starts a panel yourself, even while Claude is busy; `/panel` alone opens the pane.
+- **An optional gate** (`byoclaude config set panel.gate true`): before a risky shell command (`rm -rf`, force push, `git reset --hard`, `git clean -f`, `DROP TABLE`, `terraform apply`, `kubectl delete`), Claude Code asks you to run it, ask a panel first, or refuse.
+
+In `claude -p`, the tool waits for the verdict and returns it. Where mods are off (`--safe-mode`, `--bare`, `disableAllHooks`), Claude runs `byoclaude panel` with Bash instead, and `/byoclaude:panel <question>` asks Claude to. Like any mod, it runs inside Claude Code with your permissions.
 
 ## Configuration
 
@@ -147,6 +158,7 @@ Settings live in `~/.byoclaude/config.json` (or `$BYOCLAUDE_HOME`). Edit them in
 | `panel.size` | Panel size when picking automatically (`-n`, default `3`) |
 | `panel.test_command` | Test command for attempts, also allowed for opinion panelists (`--test`) |
 | `panel.timeout_secs` | Seconds each panelist, the judge and each test run may take (`--timeout`, default `900`) |
+| `panel.gate` | Before risky shell commands, ask whether to run them, ask a panel first, or refuse (default `false`) |
 
 Credentials are stored in `~/.byoclaude/auth.json` (owner-only), or referenced from config as `$ENV_VAR` or `!command`.
 
