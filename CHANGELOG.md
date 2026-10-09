@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+- Security: jsonwebtoken 10.4, which byom uses to check the ChatGPT sign-in token, fixes a type confusion that could let a malformed token pass validation.
+- Requests to OpenRouter name byom as the app (`HTTP-Referer`, `X-Title`).
+- Install with Homebrew: `brew install baoengineer/tap/byom`.
+
 ## 0.4.1
 
 - Claude Code's tool search stays on when the main model is Claude, so Claude requests list MCP tools on demand instead of all at once (about half the prompt in a measured headless call). Other providers never receive the tool search tools.
