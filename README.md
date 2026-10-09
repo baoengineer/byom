@@ -6,7 +6,9 @@
 [![Release](https://img.shields.io/github/v/release/baoengineer/byom)](https://github.com/baoengineer/byom/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Bring your own model to Claude Code.** Keep using [Claude Code](https://claude.com/claude-code), and use every model you can sign in to in the same session: GPT on your ChatGPT plan, GLM, Kimi, MiniMax, DeepSeek, Gemini, Groq, OpenRouter, and local models through Ollama or LM Studio. Claude stays available too.
+English | [简体中文](README.zh-CN.md)
+
+**Use your ChatGPT plan inside Claude Code.** Sign in with ChatGPT, no API key, and GPT shows up in [Claude Code](https://claude.com/claude-code)'s `/model` picker next to Claude. GLM, Kimi, MiniMax, DeepSeek, Gemini, Groq, OpenRouter, and local models through Ollama or LM Studio work the same way. byom stands for bring your own model.
 
 ![byom config, then Claude Code on GPT-5.6-Sol, then /model with Claude and GPT side by side](docs/demo/demo.gif)
 
@@ -37,6 +39,12 @@ With Homebrew:
 brew install baoengineer/tap/byom
 ```
 
+With Cargo:
+
+```sh
+cargo install byom
+```
+
 Or download a binary from [Releases](https://github.com/baoengineer/byom/releases), for example on an Apple silicon Mac:
 
 ```sh
@@ -46,7 +54,7 @@ mv byom-v0.4.2-aarch64-apple-darwin/byom ~/.local/bin/    # any directory on you
 xattr -d com.apple.quarantine ~/.local/bin/byom             # macOS: the binary is not notarized
 ```
 
-Each archive has a `.sha256` file to check it against. Or build from source with Rust 1.89 or newer:
+Each archive has a `.sha256` file to check it against. Or build the latest source with Rust 1.89 or newer:
 
 ```sh
 cargo install --git https://github.com/baoengineer/byom
