@@ -1,4 +1,4 @@
-//! `byoclaude models` and `byoclaude logs`: the model roster with live status, and the
+//! `byom models` and `byom logs`: the model roster with live status, and the
 //! request log.
 use std::collections::HashMap;
 
@@ -168,9 +168,7 @@ pub async fn print(
     // Usable models first, then by provider order.
     models.sort_by_key(|m| m["status"] != "ready");
     if models.is_empty() {
-        println!(
-            "No models yet. Sign in with `byoclaude login`, then run `byoclaude models --refresh`."
-        );
+        println!("No models yet. Sign in with `byom login`, then run `byom models --refresh`.");
         return Ok(());
     }
     println!(

@@ -190,7 +190,7 @@ impl Upstream {
             ProviderError::new(
                 401,
                 "authentication_error",
-                format!("ChatGPT sign-in unavailable: {e}. Run byoclaude login."),
+                format!("ChatGPT sign-in unavailable: {e}. Run byom login."),
             )
         })?;
         let mut request = self.ws_url.as_str().into_client_request().map_err(|e| {
@@ -403,7 +403,7 @@ impl Upstream {
             ProviderError::new(
                 401,
                 "authentication_error",
-                format!("ChatGPT sign-in unavailable: {e}. Run byoclaude login."),
+                format!("ChatGPT sign-in unavailable: {e}. Run byom login."),
             )
         })?;
         let mut request = turn.body.clone();

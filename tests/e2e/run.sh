@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Drive the installed Claude Code through `byoclaude run` against a scripted mock of the
+# Drive the installed Claude Code through `byom run` against a scripted mock of the
 # OpenAI Responses WebSocket API (examples/mock_openai.rs). Spends no plan usage.
 # Requires: cargo, python3, and Claude Code (`claude`) on PATH.
 # Usage: tests/e2e/run.sh
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
-(cd "$root" && cargo build --quiet --release --bin byoclaude --example mock_openai)
-bin=$root/target/release/byoclaude
+(cd "$root" && cargo build --quiet --release --bin byom --example mock_openai)
+bin=$root/target/release/byom
 mock=$root/target/release/examples/mock_openai
 work=$(mktemp -d)
 home=$work/home
@@ -26,7 +26,7 @@ cat > "$home/auth.json" <<JSON
 {"openai":{"access_token":"mock-access","refresh_token":"mock-refresh","id_token":"x","client_id":"mock-client",
  "subject":"mock","email":null,"scopes":["chatgpt.tokens.use.direct"],"expires_at":$far,"earliest_refresh_at":0}}
 JSON
-echo "{\"upstream_base_url\":\"http://127.0.0.1:$mock_port/v1\",\"providers\":{\"anthropic\":{\"base_url\":\"http://127.0.0.1:$anthropic_port\"}}}" > "$home/config.json"
+echo "{\"relay\":true,\"upstream_base_url\":\"http://127.0.0.1:$mock_port/v1\",\"providers\":{\"anthropic\":{\"base_url\":\"http://127.0.0.1:$anthropic_port\"}}}" > "$home/config.json"
 mkdir -m 700 "$home/cache"
 echo '[]' > "$home/cache/roster.json"
 cat > "$home/cache/models.json" <<JSON
@@ -34,7 +34,7 @@ cat > "$home/cache/models.json" <<JSON
  {"slug":"mock-luna","display_name":"Mock Luna","description":"","context_window":272000,"effort_levels":["low"],"default_effort":"low","listed":true}]
 JSON
 
-MOCK_SUBAGENT=byoclaude:openai-mock-main MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
+MOCK_SUBAGENT=byom:openai-mock-main MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
 mock_pid=$!
 sleep 0.5
 
@@ -42,17 +42,17 @@ mkdir "$work/project" "$work/claude-config"
 cd "$work/project"
 # Isolate from the user's Claude Code config: no hooks, MCP servers, or session history.
 export CLAUDE_CONFIG_DIR=$work/claude-config
-BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run mock-main -- \
+BYOM_HOME=$home BYOM_PORT=$bridge_port "$bin" run mock-main -- \
   -p "Run the marker check." --allowedTools Bash --output-format stream-json --verbose \
   < /dev/null > "$work/claude.jsonl" 2> "$work/claude.err" || true
 
-BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run mock-main -- \
+BYOM_HOME=$home BYOM_PORT=$bridge_port "$bin" run mock-main -- \
   -p "SEARCHTEST: look this up." --allowedTools WebSearch --output-format stream-json --verbose \
   < /dev/null > "$work/search.jsonl" 2>> "$work/claude.err" || true
 
 # Relay: Claude Code signed in (a fake token), Claude main model relayed to the mock
 # Anthropic endpoint, and the session plugin's agent for an OpenAI model as the subagent.
-CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-mock BYOCLAUDE_HOME=$home BYOCLAUDE_PORT=$bridge_port "$bin" run -- \
+CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-mock BYOM_HOME=$home BYOM_PORT=$bridge_port "$bin" run -- \
   -p "SUBAGENTTEST: ask another model." \
   --output-format stream-json --verbose < /dev/null > "$work/relay.jsonl" 2>> "$work/claude.err" || true
 
@@ -89,7 +89,7 @@ checks.update({
     "relay: final answer from Claude": relay_final.get("result") == "Claude mock answer." and not relay_final.get("is_error"),
     "relay: logged as relay": any(b.get("transport") == "relay" for b in bridge),
     "plugin: per-model agent offered to Claude": any(a.get("lists_plugin_agent") for a in relayed),
-    "plugin: byoclaude skill offered to Claude": any(a.get("lists_skill") for a in relayed),
+    "plugin: byom skill offered to Claude": any(a.get("lists_skill") for a in relayed),
 })
 for name, ok in checks.items():
     print(("PASS " if ok else "FAIL ") + name)

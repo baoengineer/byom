@@ -1,4 +1,4 @@
-//! `byoclaude doctor`: check everything a session depends on and say how to fix what fails.
+//! `byom doctor`: check everything a session depends on and say how to fix what fails.
 use anyhow::Result;
 
 use crate::providers::Auth;
@@ -56,7 +56,7 @@ pub async fn run() -> Result<()> {
             report.line(
                 false,
                 "Config",
-                &format!("{e:#}; fix it with `byoclaude config`"),
+                &format!("{e:#}; fix it with `byom config`"),
             );
             crate::config::Config::default()
         }
@@ -83,11 +83,11 @@ pub async fn run() -> Result<()> {
         Some(v) => report.note(
             "Bridge",
             &format!(
-                "running {v}; the next `byoclaude run` replaces it with {}",
+                "running {v}; the next `byom run` replaces it with {}",
                 env!("CARGO_PKG_VERSION")
             ),
         ),
-        None => report.note("Bridge", "not running; `byoclaude run` starts it"),
+        None => report.note("Bridge", "not running; `byom run` starts it"),
     }
 
     let client = crate::catalog::client(8)?;
@@ -101,7 +101,7 @@ pub async fn run() -> Result<()> {
                     .flatten()
                     .is_none()
                 {
-                    report.note(&provider.id, "not signed in (`byoclaude login openai`)");
+                    report.note(&provider.id, "not signed in (`byom login openai`)");
                     continue;
                 }
                 match crate::auth::access_token().await {
@@ -112,7 +112,7 @@ pub async fn run() -> Result<()> {
                     Err(e) => report.line(
                         false,
                         &provider.id,
-                        &format!("{e:#}; run `byoclaude login openai`"),
+                        &format!("{e:#}; run `byom login openai`"),
                     ),
                 }
             }

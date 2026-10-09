@@ -12,21 +12,21 @@ body:
   - type: textarea
     id: doctor
     attributes:
-      label: byoclaude doctor
-      description: Output of `byoclaude doctor`. Remove anything private.
+      label: byom doctor
+      description: Output of `byom doctor`. Remove anything private.
       render: text
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: byoclaude logs
-      description: Output of `byoclaude logs -n 20` around the failure. It holds metadata only, no prompts or keys.
+      label: byom logs
+      description: Output of `byom logs -n 20` around the failure. It holds metadata only, no prompts or keys.
       render: text
   - type: input
     id: versions
     attributes:
       label: Versions
-      description: "`byoclaude --version`, `claude --version`, and your OS"
+      description: "`byom --version`, `claude --version`, and your OS"
     validations:
       required: true

@@ -1,4 +1,4 @@
-//! On-disk state: `~/.byoclaude` (or `$BYOCLAUDE_HOME`) and its owner-only files.
+//! On-disk state: `~/.byom` (or `$BYOM_HOME`) and its owner-only files.
 //!
 //! ```text
 //! config.json   settings            auth.json   credentials, keyed by provider
@@ -184,21 +184,51 @@ pub mod auth {
     }
 }
 
-/// Move a 0.1.0 state directory (`~/.byoclaude-rs`) into the current layout. Runs only when
-/// `$BYOCLAUDE_HOME` is unset and the new home does not exist; the old directory is left as is.
+/// Copy earlier state into the current home: `~/.byoclaude` (0.2.0) or `~/.byoclaude-rs`
+/// (0.1.0). Runs only when `$BYOM_HOME` is unset and the new home does not exist; old
+/// directories are left as they are.
 pub fn migrate() -> Result<()> {
-    if std::env::var_os("BYOCLAUDE_HOME").is_some() {
+    if std::env::var_os("BYOM_HOME").is_some() {
         return Ok(());
     }
     let new = home()?;
     let Some(user_home) = new.parent() else {
         return Ok(());
     };
+    if new.exists() {
+        return Ok(());
+    }
+    let previous = user_home.join(".byoclaude");
+    if previous.is_dir() {
+        return copy_home(&previous, &new);
+    }
     let old = user_home.join(".byoclaude-rs");
-    if new.exists() || !old.is_dir() {
+    if !old.is_dir() {
         return Ok(());
     }
     migrate_dir(&old, &new)
+}
+
+/// Copy a 0.2.0 home: settings, credentials, keys and model caches.
+fn copy_home(old: &Path, new: &Path) -> Result<()> {
+    private_dir(new)?;
+    for name in [
+        "config.json",
+        "auth.json",
+        "bridge.key",
+        "host-id",
+        "cache/models.json",
+        "cache/roster.json",
+    ] {
+        if let Some(bytes) = read_private(&old.join(name)).ok().flatten() {
+            let to = new.join(name);
+            if let Some(parent) = to.parent() {
+                private_dir(parent)?;
+            }
+            write_private(&to, &bytes)?;
+        }
+    }
+    Ok(())
 }
 
 fn migrate_dir(old: &Path, new: &Path) -> Result<()> {
@@ -245,7 +275,7 @@ mod tests {
     fn migrates_old_layout_without_touching_it() {
         let root = tempfile::tempdir().unwrap();
         let old = root.path().join(".byoclaude-rs");
-        let new = root.path().join(".byoclaude");
+        let new = root.path().join(".byom");
         private_dir(&old).unwrap();
         private(&old, "chatgpt.json", r#"{"access_token":"a"}"#);
         private(
@@ -270,6 +300,25 @@ mod tests {
         assert!(new.join("cache/models.json").exists());
         assert!(new.join("bridge.key").exists());
         assert!(old.join("chatgpt.json").exists());
+    }
+
+    #[test]
+    fn copies_a_byoclaude_home() {
+        let root = tempfile::tempdir().unwrap();
+        let old = root.path().join(".byoclaude");
+        let new = root.path().join(".byom");
+        private_dir(&old.join("cache")).unwrap();
+        private(&old, "config.json", r#"{"relay":true}"#);
+        private(&old, "auth.json", r#"{"kimi":{"api_key":"k"}}"#);
+        private(&old, "cache/roster.json", "[]");
+        copy_home(&old, &new).unwrap();
+        assert_eq!(
+            read_private(&new.join("config.json")).unwrap().unwrap(),
+            br#"{"relay":true}"#
+        );
+        assert!(new.join("auth.json").exists() && new.join("cache/roster.json").exists());
+        assert!(!new.join("bridge.key").exists());
+        assert!(old.join("auth.json").exists());
     }
 
     #[cfg(unix)]

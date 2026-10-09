@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>byoclaude</title>
+<title>byom</title>
 <meta name="description" content="Every model you sign in to, inside Claude Code: GPT on your ChatGPT plan, GLM, Kimi, DeepSeek, Gemini and local models in the same /model picker as Claude.">
 <meta name="theme-color" content="#f4f4f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111218" media="(prefers-color-scheme: dark)">
@@ -235,16 +235,16 @@ footer nav a { padding-block: 10px; }
 <a class="skip" href="#main">Skip to content</a>
 <div class="wrap">
   <header class="top">
-    <a class="brand" href="#" aria-label="byoclaude home">
+    <a class="brand" href="#" aria-label="byom home">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
         <circle cx="4" cy="12" r="2.2" fill="currentColor" stroke="none"/>
         <path d="M6 12h5"/><path d="M11 12c3 0 4-6 8-6"/><path d="M11 12h8"/><path d="M11 12c3 0 4 6 8 6"/>
       </svg>
-      byoclaude
+      byom
     </a>
     <nav class="links" aria-label="Site">
-      <a href="https://github.com/baoengineer/byoclaude/releases">Download</a>
-      <a href="https://github.com/baoengineer/byoclaude">GitHub</a>
+      <a href="https://github.com/baoengineer/byom/releases">Download</a>
+      <a href="https://github.com/baoengineer/byom">GitHub</a>
     </nav>
   </header>
 
@@ -254,12 +254,12 @@ footer nav a { padding-block: 10px; }
         <h1>Every model you sign in to, inside Claude&nbsp;Code.</h1>
         <p class="lede">GPT on your ChatGPT plan, GLM, Kimi, DeepSeek, Gemini and local models, in the same <code>/model</code> picker as Claude.</p>
         <div class="install" translate="no">
-          <code id="install-cmd">cargo install --git https://github.com/<wbr>baoengineer/byoclaude</code>
+          <code id="install-cmd">cargo install --git https://github.com/<wbr>baoengineer/byom</code>
           <button class="copy" type="button" data-copy="install-cmd" aria-label="Copy install command">Copy</button>
         </div>
       </div>
 
-      <figure class="term" role="group" aria-label="Claude Code's model picker with byoclaude" translate="no" style="margin:0">
+      <figure class="term" role="group" aria-label="Claude Code's model picker with byom" translate="no" style="margin:0">
         <div class="term-bar"><span>~/myapp</span><span id="bar-model">GPT-5.6-Sol</span></div>
         <div class="term-body">
           <div><span class="g">❯</span> /model</div>
@@ -275,11 +275,11 @@ footer nav a { padding-block: 10px; }
         </div>
         <div class="term-foot">
           <div class="route" aria-hidden="true">
-            <span>Claude Code</span><span class="seg"><i></i></span><span>byoclaude</span><span class="seg"><i></i></span><span id="route-name">OpenAI</span>
+            <span>Claude Code</span><span class="seg"><i></i></span><span>byom</span><span class="seg"><i></i></span><span id="route-name">OpenAI</span>
             <span class="host" id="route-host">api.openai.com</span><span class="kind" id="route-kind">translated, WebSocket</span>
           </div>
           <div class="run">
-            <div class="cmd"><span class="g">$</span> byoclaude run <span class="mid" id="run-id">openai/gpt-5.6-sol</span><span class="caret" id="caret" aria-hidden="true"></span></div>
+            <div class="cmd"><span class="g">$</span> byom run <span class="mid" id="run-id">openai/gpt-5.6-sol</span><span class="caret" id="caret" aria-hidden="true"></span></div>
             <button class="copy" type="button" data-copy="run" aria-label="Copy run command">Copy</button>
           </div>
         </div>
@@ -289,7 +289,7 @@ footer nav a { padding-block: 10px; }
 
     <section aria-label="Recording">
       <figure class="rec">
-        <video id="demo" src="demo.mp4" poster="demo.jpg" width="1240" height="720" muted loop playsinline controls preload="metadata" aria-label="Recording: byoclaude config, a Claude Code session answering on GPT-5.6-Sol, then /model listing Claude and GPT models together"></video>
+        <video id="demo" src="demo.mp4" poster="demo.jpg" width="1240" height="720" muted loop playsinline controls preload="metadata" aria-label="Recording: byom config, a Claude Code session answering on GPT-5.6-Sol, then /model listing Claude and GPT models together"></video>
         <figcaption>A real session, recorded against local mock servers.</figcaption>
       </figure>
     </section>
@@ -301,7 +301,7 @@ footer nav a { padding-block: 10px; }
       </div>
       <ol class="flow" id="flow">
         <li><span class="dot"></span><b>Opus</b><span>reviews your diff</span><i class="bar"></i></li>
-        <li><span class="dot"></span><b>Agent</b><code translate="no">byoclaude:openai-gpt-5-6-sol</code><i class="bar"></i></li>
+        <li><span class="dot"></span><b>Agent</b><code translate="no">byom:openai-gpt-5-6-sol</code><i class="bar"></i></li>
         <li><span class="dot"></span><b>GPT-5.6-Sol</b><span>on your ChatGPT plan</span><i class="bar"></i></li>
         <li><span class="dot"></span><b>One issue</b><span><code translate="no">release()</code> returns the socket before it is reset</span></li>
       </ol>
@@ -312,16 +312,16 @@ footer nav a { padding-block: 10px; }
         <h2 id="start-h">Sign in, then run.</h2>
         <div class="term" translate="no">
           <div class="term-bar"><span>~/myapp</span><button class="copy" type="button" data-copy="steps" aria-label="Copy sign-in and run commands">Copy</button></div>
-          <pre class="term-body" id="steps" tabindex="0" aria-label="Commands"><span class="g">$</span> byoclaude login
-<span class="g">$</span> byoclaude</pre>
+          <pre class="term-body" id="steps" tabindex="0" aria-label="Commands"><span class="g">$</span> byom login
+<span class="g">$</span> byom</pre>
         </div>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Independent project, not affiliated with Anthropic or OpenAI. Claude requests are relayed on Claude Code’s own sign-in; turn that off with <code>byoclaude config set relay false</code>. MIT licensed, for macOS and Linux.</p>
-    <nav aria-label="Project"><a href="https://github.com/baoengineer/byoclaude">GitHub</a><a href="https://github.com/baoengineer/byoclaude/releases">Releases</a><a href="https://github.com/baoengineer/byoclaude/blob/main/docs/ARCHITECTURE.md">Architecture</a></nav>
+    <p>Independent project, not affiliated with Anthropic or OpenAI. Claude models through your Claude plan are opt-in: <code>byom config set relay true</code>, after reading <a href="https://github.com/baoengineer/byom#claude-models">Claude models</a>. MIT licensed, for macOS and Linux.</p>
+    <nav aria-label="Project"><a href="https://github.com/baoengineer/byom">GitHub</a><a href="https://github.com/baoengineer/byom/releases">Releases</a><a href="https://github.com/baoengineer/byom/blob/main/docs/ARCHITECTURE.md">Architecture</a></nav>
   </footer>
 </div>
 
@@ -455,7 +455,7 @@ footer nav a { padding-block: 10px; }
     button.addEventListener("click", () => {
       const target = button.dataset.copy;
       const node = target === "run" ? $("run-id") : $(target);
-      const text = target === "run" ? `byoclaude run ${ROWS[index].id}` : node.textContent.replace(/^\$ /gm, "");
+      const text = target === "run" ? `byom run ${ROWS[index].id}` : node.textContent.replace(/^\$ /gm, "");
       const show = (label) => {
         clearTimeout(button._t);
         if (label === "Copied") button.dataset.done = "";

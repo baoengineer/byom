@@ -46,7 +46,7 @@ fn client() -> Result<reqwest::Client> {
 }
 fn parse(bytes: &[u8]) -> Result<Session> {
     let s: Session = serde_json::from_slice(bytes)
-        .map_err(|_| anyhow::anyhow!("Invalid OAuth state; sign in again with byoclaude login"))?;
+        .map_err(|_| anyhow::anyhow!("Invalid OAuth state; sign in again with byom login"))?;
     if s.client_id.is_empty()
         || s.client_id == "dynamic_agent_client"
         || s.subject.is_empty()
@@ -69,7 +69,7 @@ fn save(session: &Session) -> Result<()> {
     store::auth::set(PROVIDER, serde_json::to_value(session)?)
 }
 fn signed_in() -> Result<Session> {
-    load()?.context("Not signed in. Run: byoclaude login")
+    load()?.context("Not signed in. Run: byom login")
 }
 fn token_session(
     v: &Value,
@@ -286,7 +286,7 @@ pub async fn login() -> Result<()> {
             ("code_challenge", challenge.as_str()),
         ]);
         if previous.is_none() {
-            q.append_pair("agent_name_hint", "byoclaude");
+            q.append_pair("agent_name_hint", "byom");
         }
     }
     println!("Continue with ChatGPT:\n{url}\nWaiting for browser login (5 minutes)…");
@@ -313,7 +313,7 @@ pub async fn login() -> Result<()> {
                 Err(e)=>{let _=socket.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await;if format!("{e}").contains("declined") { return Err(e); }}
             }
         }
-    }).await.context("Browser login timed out; run byoclaude login again")??;
+    }).await.context("Browser login timed out; run byom login again")??;
     let c = client()?;
     let token = exchange(
         &c,
@@ -340,7 +340,7 @@ pub async fn login() -> Result<()> {
     let s = token_session(&token, &result.1, (&identity.0, identity.1), None)?;
     save(&s)?;
     println!(
-        "Signed in. Using ChatGPT plan—not an API key. Manage usage: https://chatgpt.com/settings/usage\nRun `byoclaude models` to see your available model IDs."
+        "Signed in. Using ChatGPT plan—not an API key. Manage usage: https://chatgpt.com/settings/usage\nRun `byom models` to see your available model IDs."
     );
     Ok(())
 }

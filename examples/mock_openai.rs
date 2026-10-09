@@ -164,10 +164,10 @@ async fn anthropic(port: u16, log: String, issued: Arc<Mutex<HashSet<&'static st
             let record = json!({
                 "path": uri.path(), "model": request["model"],
                 "auth_prefix": auth.trim_start_matches("Bearer ").chars().take(10).collect::<String>(),
-                "bridge_key_forwarded": headers.contains_key("x-byoclaude-key"),
+                "bridge_key_forwarded": headers.contains_key("x-byom-key"),
                 "user_agent": header("user-agent"),
-                "lists_plugin_agent": body.windows(19).any(|w| w == b"byoclaude:openai-mo"),
-                "lists_skill": String::from_utf8_lossy(&body).contains("byoclaude:byoclaude"),
+                "lists_plugin_agent": String::from_utf8_lossy(&body).contains("byom:openai-mo"),
+                "lists_skill": String::from_utf8_lossy(&body).contains("byom:byom"),
             });
             if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
                 let _ = writeln!(file, "{record}");

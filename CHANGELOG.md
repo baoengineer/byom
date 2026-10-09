@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+Renamed to byom, and the Claude relay is opt-in.
+
+- byoclaude is now byom ("bring your own model"): the binary, crate, `~/.byom` (copied from `~/.byoclaude` on first run), `BYOM_HOME`, `BYOM_PORT`, the `x-byom-key` header and `byom:` agent names.
+- The Claude relay is off by default. Turn it on with `byom config set relay true`; the README explains Anthropic's terms first. A saved Anthropic API key now makes Claude models available without the relay, and a signed-in Claude Code's own credential takes precedence over it.
+- Security: API keys are re-read on every request, so `logout` and new keys apply to a running bridge; requests carrying keys do not follow redirects; providers other than the Claude relay receive only an allowlist of headers; pasted keys are stored as typed and never run.
+- Chat Completions providers: a stream cut off before finishing is an error instead of a finished turn, and parallel tool calls no longer merge.
+- Non-object JSON bodies get a 400 instead of failing the request handler.
+- 0.3.0 was tagged briefly and withdrawn; its panels feature was removed before release.
+
 ## 0.2.0
 
 Multi-provider sessions.

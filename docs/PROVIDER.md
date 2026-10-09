@@ -4,7 +4,7 @@ The `openai` provider uses OpenAI's [ChatGPT plan usage in open-source apps](htt
 
 ## Sign-in
 
-- Dynamic client registration: first sign-in uses `client_id=dynamic_agent_client` with `agent_name_hint=byoclaude`; later sign-ins reuse the issued client ID and a stable host ID.
+- Dynamic client registration: first sign-in uses `client_id=dynamic_agent_client` with `agent_name_hint=byom`; later sign-ins reuse the issued client ID and a stable host ID.
 - Authorization code flow with PKCE (S256), state and nonce, on a `127.0.0.1` callback.
 - Scopes `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`, resource `https://api.openai.com/v1`. Sign-in fails without `chatgpt.tokens.use.direct`.
 - The ID token is verified against OpenAI's JWKS: issuer, audience, expiry and nonce.
@@ -12,7 +12,7 @@ The `openai` provider uses OpenAI's [ChatGPT plan usage in open-source apps](htt
 
 ## Models
 
-`GET https://api.openai.com/v1/models` with the access token returns the account's catalog. byoclaude reads `slug`, `display_name`, `description`, `context_window`, `supported_reasoning_levels`, `default_reasoning_level` and `visibility`, and caches them in `models.json`.
+`GET https://api.openai.com/v1/models` with the access token returns the account's catalog. byom reads `slug`, `display_name`, `description`, `context_window`, `supported_reasoning_levels`, `default_reasoning_level` and `visibility`, and caches them in `models.json`.
 
 ## Inference
 
@@ -39,7 +39,7 @@ Observed behavior:
 
 Each connected app has a usage cap that the user can change in [ChatGPT Settings → Usage](https://chatgpt.com/settings/usage). Exceeding it returns `subscription_sharing_usage_limit_exceeded`, sometimes as an `error` event inside an HTTP 200 stream. On Plus, a five-hour limit is shared across every app using the plan.
 
-byoclaude maps errors to Anthropic error types so Claude Code reacts correctly:
+byom maps errors to Anthropic error types so Claude Code reacts correctly:
 
 | OpenAI | Claude Code sees |
 |---|---|

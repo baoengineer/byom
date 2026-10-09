@@ -47,7 +47,7 @@ fn read_secret(prompt: &str) -> Result<String> {
     if std::io::stdin().is_terminal() {
         rpassword::prompt_password(prompt).context("reading key")
     } else {
-        // Piped input: `printf %s "$KEY" | byoclaude login zai`.
+        // Piped input: `printf %s "$KEY" | byom login zai`.
         read_line("")
     }
 }
@@ -65,7 +65,7 @@ fn choose(config: &crate::config::Config) -> Result<Provider> {
     let providers = crate::providers::all(config);
     if !std::io::stdin().is_terminal() {
         bail!(
-            "name a provider: byoclaude login <provider>. Providers: {}",
+            "name a provider: byom login <provider>. Providers: {}",
             ids(&providers)
         );
     }
@@ -138,12 +138,12 @@ pub async fn login(provider: Option<String>) -> Result<()> {
         .count();
     if count > 0 {
         println!(
-            "{count} {} model(s) available. List them with: byoclaude models --provider {}",
+            "{count} {} model(s) available. List them with: byom models --provider {}",
             provider.id, provider.id
         );
     } else if provider.auth != Auth::ClaudeCode {
         println!(
-            "No {} models found yet. Name the ones you want in config: byoclaude config set providers.{}.models <model>",
+            "No {} models found yet. Name the ones you want in config: byom config set providers.{}.models <model>",
             provider.id, provider.id
         );
     }
@@ -161,7 +161,7 @@ pub async fn logout(provider: String) -> Result<()> {
         println!("No saved sign-in for {provider}.");
     }
     if provider == "openai" {
-        println!("To revoke byoclaude's access entirely, disconnect it in ChatGPT settings.");
+        println!("To revoke byom's access entirely, disconnect it in ChatGPT settings.");
     }
     Ok(())
 }

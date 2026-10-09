@@ -60,7 +60,7 @@ impl ProviderError {
             Some(401) => Self::new(
                 401,
                 "authentication_error",
-                format!("ChatGPT sign-in was rejected ({code}): {message} Run byoclaude login."),
+                format!("ChatGPT sign-in was rejected ({code}): {message} Run byom login."),
             ),
             Some(403) => Self::new(403, "permission_error", format!("{code}: {message}")),
             Some(404) => Self::new(404, "not_found_error", format!("{code}: {message}")),
@@ -220,7 +220,7 @@ impl Translator {
         out.push(Event {
             name: "message_start",
             data: json!({"type": "message_start", "message": {
-                "id": self.response_id.clone().unwrap_or_else(|| "msg_byoclaude".into()),
+                "id": self.response_id.clone().unwrap_or_else(|| "msg_byom".into()),
                 "type": "message", "role": "assistant", "model": self.model, "content": [],
                 "stop_reason": null, "stop_sequence": null,
                 "usage": {"input_tokens": 0, "output_tokens": 0},
@@ -548,7 +548,7 @@ impl Translator {
     /// The complete assistant message, for non-streaming responses.
     pub fn message(&self) -> Value {
         json!({
-            "id": self.response_id.clone().unwrap_or_else(|| "msg_byoclaude".into()),
+            "id": self.response_id.clone().unwrap_or_else(|| "msg_byom".into()),
             "type": "message", "role": "assistant", "model": self.model,
             "content": self.content, "stop_reason": self.stop_reason, "stop_sequence": null,
             "usage": self.usage,

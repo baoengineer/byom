@@ -8,7 +8,7 @@ use tokio::time::{Instant, sleep};
 const DEFAULT_PORT: u16 = 47391;
 
 fn port() -> u16 {
-    std::env::var("BYOCLAUDE_PORT")
+    std::env::var("BYOM_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(DEFAULT_PORT)
@@ -184,10 +184,10 @@ async fn ensure_bridge(client: &reqwest::Client) -> Result<String> {
         if version == env!("CARGO_PKG_VERSION") {
             return Ok(key);
         }
-        // Replace a bridge left running by another byoclaude version.
+        // Replace a bridge left running by another byom version.
         if !request_shutdown(client, &key).await {
             bail!(
-                "a byoclaude {version} bridge is running on port {} and cannot be stopped automatically; stop that process and retry",
+                "a byom {version} bridge is running on port {} and cannot be stopped automatically; stop that process and retry",
                 port()
             );
         }
@@ -296,7 +296,7 @@ pub struct Row {
     pub description: String,
 }
 
-/// Every non-Claude model byoclaude can route: the cached roster, the ChatGPT catalog and
+/// Every non-Claude model byom can route: the cached roster, the ChatGPT catalog and
 /// models named in config.
 pub fn rows(
     config: &crate::config::Config,
@@ -393,7 +393,7 @@ pub fn plan(
         Some(model) => Some(model),
         None if claude => None,
         None => Some(first.clone().context(
-            "no models available. Sign in with `byoclaude login`, or sign in to Claude Code to use Claude models",
+            "no models available. Sign in with `byom login`, or sign in to Claude Code to use Claude models",
         )?),
     };
     if !claude && model.as_deref().is_some_and(is_claude) {
@@ -401,7 +401,7 @@ pub fn plan(
             "Claude models need Claude Code signed in to Claude (`claude auth login`) and \"claude\" enabled"
         );
     }
-    // Without the claude, Claude's own slots are unusable, so they follow byoclaude's choices.
+    // Without the claude, Claude's own slots are unusable, so they follow byom's choices.
     let small = rows
         .iter()
         .find(|r| r.id.contains("luna") || r.id.contains("mini"))
@@ -492,17 +492,19 @@ pub fn claude_signed_in() -> bool {
             .is_none_or(|p| p == "firstParty")
 }
 
-const RELAY_NOTE: &str = "byoclaude: Claude models in this session reach Anthropic through byoclaude's local relay, using Claude Code's own sign-in. Request bodies and Claude Code's headers pass through unchanged, but Anthropic has not explicitly approved relaying subscription traffic. To keep Claude Code talking to Anthropic directly, run: byoclaude config set relay false";
+const RELAY_NOTE: &str = "byom: Claude models in this session reach Anthropic through byom's local relay, on Claude Code's own sign-in. Requests pass through unchanged and nothing from the sign-in is stored. Anthropic documents local gateways for Claude Code, but its terms also limit third-party tools that route subscription traffic; see https://github.com/baoengineer/byom#claude-models. To turn it off: byom config set relay false";
 
-/// Print the relay note once per state directory.
-fn relay_note() {
-    let Ok(marker) = crate::store::home().map(|h| h.join(".relay-note-shown")) else {
+const RELAY_HINT: &str = "byom: Claude models are off. Claude Code is signed in to Claude; to add Claude next to the other models through byom's local relay, read https://github.com/baoengineer/byom#claude-models and run: byom config set relay true";
+
+/// Print a note once per state directory, keyed by its marker file.
+fn note_once(marker: &str, text: &str) {
+    let Ok(marker) = crate::store::home().map(|h| h.join(marker)) else {
         return;
     };
     if marker.exists() {
         return;
     }
-    eprintln!("{RELAY_NOTE}\n");
+    eprintln!("{text}\n");
     let _ = crate::store::write_private(&marker, b"");
 }
 
@@ -524,7 +526,9 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     )?;
     let key = ensure_bridge(&client()?).await?;
     if relay {
-        relay_note();
+        note_once(".relay-note-shown", RELAY_NOTE);
+    } else if !config.relay && !crate::providers::claude_key(&config) && claude_signed_in() {
+        note_once(".relay-hint-shown", RELAY_HINT);
     }
     let mut command = std::process::Command::new("claude");
     if relay {
@@ -604,7 +608,7 @@ pub async fn status() -> Result<()> {
         return Ok(());
     }
     bail!(
-        "Bridge is not running on port {}. byoclaude run starts it.",
+        "Bridge is not running on port {}. byom run starts it.",
         port()
     );
 }

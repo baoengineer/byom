@@ -140,7 +140,7 @@ fn same(token: &str, key: &str) -> bool {
             == 0
 }
 
-/// The bridge key arrives in `x-byoclaude-key` (when Claude Code keeps its own credential in
+/// The bridge key arrives in `x-byom-key` (when Claude Code keeps its own credential in
 /// `Authorization`) or as the bearer token or API key.
 fn authenticated(headers: &HeaderMap, key: &str) -> bool {
     let value = |name: &str| headers.get(name).and_then(|h| h.to_str().ok());
@@ -492,7 +492,7 @@ impl Bridge {
         };
         if provider.auth == crate::providers::Auth::ApiKey && key.is_none() {
             let message = format!(
-                "No API key for {}. Run: byoclaude login {}",
+                "No API key for {}. Run: byom login {}",
                 provider.name, provider.id
             );
             self.write_log(&log, Some(&route), &message, &Value::Null);
@@ -739,7 +739,7 @@ async fn dispatch(
         return error(
             404,
             "not_found_error",
-            &format!("Unknown model {requested:?}. List models with: byoclaude models"),
+            &format!("Unknown model {requested:?}. List models with: byom models"),
         );
     };
     match (provider.protocol, provider.auth) {
@@ -775,7 +775,7 @@ async fn dispatch(
                 501,
                 "api_error",
                 &format!(
-                    "{} uses the {} protocol, which this byoclaude does not support yet",
+                    "{} uses the {} protocol, which this byom does not support yet",
                     provider.id,
                     protocol.as_str()
                 ),

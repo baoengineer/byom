@@ -30,7 +30,7 @@ const HOP: &[&str] = &[
 /// Claude-only beta flags, so `anthropic-beta` goes only to Anthropic.
 const FORWARDED: &[&str] = &["content-type", "accept", "anthropic-version", "user-agent"];
 
-pub const BRIDGE_KEY_HEADER: &str = "x-byoclaude-key";
+pub const BRIDGE_KEY_HEADER: &str = "x-byom-key";
 
 pub struct Outbound<'a> {
     pub method: Method,
@@ -96,7 +96,7 @@ pub fn prepare(
             return Err(Refusal {
                 status: 401,
                 kind: "authentication_error",
-                message: "Claude models need Claude Code signed in to Claude (run `claude auth login`), or an Anthropic API key: byoclaude login anthropic".into(),
+                message: "Claude models need Claude Code signed in to Claude (run `claude auth login`), or an Anthropic API key: byom login anthropic".into(),
             });
         }
         Auth::None => {}
@@ -105,7 +105,7 @@ pub fn prepare(
                 status: 401,
                 kind: "authentication_error",
                 message: format!(
-                    "No API key for {}. Run: byoclaude login {}",
+                    "No API key for {}. Run: byom login {}",
                     provider.name, provider.id
                 ),
             })?;

@@ -1,23 +1,23 @@
-//! What Claude learns about byoclaude: the guide printed by `byoclaude --skill`, and the
-//! session plugin `byoclaude run` loads (a pointer skill plus one agent per model).
+//! What Claude learns about byom: the guide printed by `byom --skill`, and the
+//! session plugin `byom run` loads (a pointer skill plus one agent per model).
 use std::path::PathBuf;
 
 use anyhow::Result;
 
-/// The agent contract for this version, printed by `byoclaude --skill`.
-pub const GUIDE: &str = r#"# byoclaude in this session
+/// The agent contract for this version, printed by `byom --skill`.
+pub const GUIDE: &str = r#"# byom in this session
 
-This Claude Code session runs through byoclaude, a local router. Besides Claude, it can
+This Claude Code session runs through byom, a local router. Besides Claude, it can
 run models from other providers the user signed in to: OpenAI GPT on a ChatGPT plan,
 Z.ai GLM, Kimi, MiniMax, DeepSeek, OpenRouter, local Ollama or LM Studio models, and
 others. The installed binary is the authority; this guide matches its version.
 
 ## See what is available
 
-Run `byoclaude models --json`. It returns the live roster:
+Run `byom models --json`. It returns the live roster:
 
 - `models[].id`: the model ID (`provider/model`, or a native Claude ID like `claude-opus-5-5`).
-- `models[].agent`: the subagent type that runs on that model (`byoclaude:<name>`); null for Claude models, which the Agent tool names directly.
+- `models[].agent`: the subagent type that runs on that model (`byom:<name>`); null for Claude models, which the Agent tool names directly.
 - `models[].status`: `ready`, `capped` (plan or rate limit hit in the last five hours), `no-key`, or `signed-out`.
 - Context window, max output, reasoning, tool and image support, effort levels, and price
   per million tokens (an API-price estimate; plan usage is not billed per token).
@@ -53,12 +53,12 @@ Do not switch models without a reason; the main model keeps the session's contex
 "#;
 
 const SKILL: &str = r#"---
-name: byoclaude
-description: Use other AI models in this session through byoclaude - GPT, GLM, Kimi, MiniMax, DeepSeek, local models and more. Load before choosing a model for a subagent, delegating to a non-Claude model, getting a second opinion from another model family, or when the user names a model or provider.
+name: byom
+description: Use other AI models in this session through byom - GPT, GLM, Kimi, MiniMax, DeepSeek, local models and more. Load before choosing a model for a subagent, delegating to a non-Claude model, getting a second opinion from another model family, or when the user names a model or provider.
 ---
 
-Run `byoclaude --skill` once per session and follow it. It is the guide for the
-installed byoclaude version. Then use `byoclaude models --json` for the live roster.
+Run `byom --skill` once per session and follow it. It is the guide for the
+installed byom version. Then use `byom models --json` for the live roster.
 "#;
 
 /// Agent name for a model ID: `openai/gpt-5.6-sol` becomes `openai-gpt-5-6-sol`.
@@ -75,7 +75,7 @@ pub fn agent_name(model: &str) -> String {
 
 /// Subagent type Claude passes to the Agent tool for a model.
 pub fn agent_type(model: &str) -> String {
-    format!("byoclaude:{}", agent_name(model))
+    format!("byom:{}", agent_name(model))
 }
 
 fn agent_file(row: &crate::launch::Row) -> String {
@@ -85,7 +85,7 @@ fn agent_file(row: &crate::launch::Row) -> String {
         format!("{} ({})", row.label, row.description)
     };
     format!(
-        "---\nname: {name}\ndescription: General-purpose agent running on {what}, model {id}. Use for work you want done by this model; see the byoclaude skill for when.\nmodel: {id}\n---\n\nYou are a general-purpose agent running on {id}. Complete the task you are given using the available tools, verify your work, and report back concisely: what you did, what you found, and anything uncertain.\n",
+        "---\nname: {name}\ndescription: General-purpose agent running on {what}, model {id}. Use for work you want done by this model; see the byom skill for when.\nmodel: {id}\n---\n\nYou are a general-purpose agent running on {id}. Complete the task you are given using the available tools, verify your work, and report back concisely: what you did, what you found, and anything uncertain.\n",
         name = agent_name(&row.id),
         id = row.id,
     )
@@ -104,13 +104,13 @@ pub fn prepare(rows: &[crate::launch::Row]) -> Result<PathBuf> {
     write(
         ".claude-plugin/plugin.json",
         &serde_json::json!({
-            "name": "byoclaude",
+            "name": "byom",
             "version": env!("CARGO_PKG_VERSION"),
             "description": "Models from other providers in this Claude Code session",
         })
         .to_string(),
     )?;
-    write("skills/byoclaude/SKILL.md", SKILL)?;
+    write("skills/byom/SKILL.md", SKILL)?;
     for row in rows {
         write(
             &format!("agents/{}.md", agent_name(&row.id)),
@@ -145,7 +145,7 @@ mod tests {
             agent_name("openrouter/qwen/Qwen3.7--Max"),
             "openrouter-qwen-qwen3-7-max"
         );
-        assert_eq!(agent_type("zai/glm-5.3"), "byoclaude:zai-glm-5-3");
+        assert_eq!(agent_type("zai/glm-5.3"), "byom:zai-glm-5-3");
     }
 
     #[test]

@@ -255,7 +255,7 @@ impl ChatTranslator {
             out.push(Event {
                 name: "message_start",
                 data: json!({"type": "message_start", "message": {
-                    "id": "msg_byoclaude", "type": "message", "role": "assistant", "model": self.model,
+                    "id": "msg_byom", "type": "message", "role": "assistant", "model": self.model,
                     "content": [], "stop_reason": null, "stop_sequence": null,
                     "usage": {"input_tokens": 0, "output_tokens": 0},
                 }}),
@@ -478,7 +478,7 @@ impl ChatTranslator {
 
     pub fn message(&self) -> Value {
         json!({
-            "id": "msg_byoclaude", "type": "message", "role": "assistant", "model": self.model,
+            "id": "msg_byom", "type": "message", "role": "assistant", "model": self.model,
             "content": self.content, "stop_reason": self.stop, "stop_sequence": null, "usage": self.usage,
         })
     }

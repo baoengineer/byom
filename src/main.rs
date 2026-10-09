@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-/// Bring your own Claude: run Claude Code with every model you can sign in to.
+/// Bring your own model: run Claude Code with every model you can sign in to.
 #[derive(Parser)]
 #[command(version, about, args_conflicts_with_subcommands = true)]
 struct Cli {
-    /// Print the guide Claude loads to use byoclaude's models, then exit.
+    /// Print the guide Claude loads to use byom's models, then exit.
     #[arg(long)]
     skill: bool,
     #[command(subcommand)]
@@ -88,44 +88,44 @@ enum ConfigAction {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    byoclaude::store::migrate()?;
+    byom::store::migrate()?;
     if cli.skill {
-        print!("{}", byoclaude::skill::GUIDE);
+        print!("{}", byom::skill::GUIDE);
         return Ok(());
     }
     match cli.command.unwrap_or(Command::Run {
         model: None,
         args: Vec::new(),
     }) {
-        Command::Run { model, args } => byoclaude::launch::run(model, args).await,
-        Command::Login { provider } => byoclaude::accounts::login(provider).await,
-        Command::Logout { provider } => byoclaude::accounts::logout(provider).await,
-        Command::Auth | Command::AuthStatus => byoclaude::accounts::print_status(),
+        Command::Run { model, args } => byom::launch::run(model, args).await,
+        Command::Login { provider } => byom::accounts::login(provider).await,
+        Command::Logout { provider } => byom::accounts::logout(provider).await,
+        Command::Auth | Command::AuthStatus => byom::accounts::print_status(),
         Command::Models {
             json,
             provider,
             refresh,
             all,
-        } => byoclaude::roster::print(json, provider, refresh, all).await,
+        } => byom::roster::print(json, provider, refresh, all).await,
         Command::Config { action: None } => {
             let handle = tokio::runtime::Handle::current();
-            tokio::task::spawn_blocking(move || byoclaude::tui::run(handle)).await?
+            tokio::task::spawn_blocking(move || byom::tui::run(handle)).await?
         }
         Command::Config {
             action: Some(action),
         } => match action {
-            ConfigAction::Get { key } => byoclaude::config::cli_get(&key),
-            ConfigAction::Set { key, value } => byoclaude::config::cli_set(&key, Some(&value)),
-            ConfigAction::Unset { key } => byoclaude::config::cli_set(&key, None),
+            ConfigAction::Get { key } => byom::config::cli_get(&key),
+            ConfigAction::Set { key, value } => byom::config::cli_set(&key, Some(&value)),
+            ConfigAction::Unset { key } => byom::config::cli_set(&key, None),
             ConfigAction::Path => {
-                println!("{}", byoclaude::store::config_path()?.display());
+                println!("{}", byom::store::config_path()?.display());
                 Ok(())
             }
         },
-        Command::Doctor => byoclaude::doctor::run().await,
-        Command::Status => byoclaude::launch::status().await,
-        Command::Stop => byoclaude::launch::stop().await,
-        Command::Logs { lines } => byoclaude::roster::print_logs(lines),
-        Command::Bridge { port } => byoclaude::bridge::serve(port).await,
+        Command::Doctor => byom::doctor::run().await,
+        Command::Status => byom::launch::status().await,
+        Command::Stop => byom::launch::stop().await,
+        Command::Logs { lines } => byom::roster::print_logs(lines),
+        Command::Bridge { port } => byom::bridge::serve(port).await,
     }
 }

@@ -93,7 +93,7 @@ const BUILTINS: &[Builtin] = &[
         base_url: "https://api.openai.com/v1",
         auth: Auth::ChatGpt,
         signup: "https://chatgpt.com",
-        note: "Sign in with ChatGPT; usage counts against your plan and byoclaude's app limit.",
+        note: "Sign in with ChatGPT; usage counts against your plan and byom's app limit.",
         models_dev: "openai",
     },
     Builtin {
@@ -407,7 +407,7 @@ mod tests {
     fn key_references_resolve() {
         assert_eq!(resolve_key("sk-1").unwrap(), "sk-1");
         assert_eq!(resolve_key("!printf ' sk-2\\n'").unwrap(), "sk-2");
-        assert!(resolve_key("$BYOCLAUDE_TEST_UNSET_VAR").is_err());
+        assert!(resolve_key("$BYOM_TEST_UNSET_VAR").is_err());
         assert!(resolve_key("!exit 3").is_err());
     }
 

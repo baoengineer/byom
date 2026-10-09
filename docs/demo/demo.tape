@@ -1,6 +1,6 @@
 # Records docs/demo/demo.gif against local mock OpenAI and Anthropic servers (no account, no
 # plan usage). From the repository root:
-#   cargo build --release --bin byoclaude --example mock_openai && vhs docs/demo/demo.tape
+#   cargo build --release --bin byom --example mock_openai && vhs docs/demo/demo.tape
 Output docs/demo/demo.gif
 
 Set Shell bash
@@ -18,7 +18,7 @@ Sleep 1s
 Show
 
 # 1. Every model you can sign in to, in one place.
-Type "byoclaude config"
+Type "byom config"
 Sleep 300ms
 Enter
 Sleep 2.2s
@@ -34,7 +34,7 @@ Type "q"
 Sleep 400ms
 
 # 2. Claude Code, running on GPT.
-Type "byoclaude"
+Type "byom"
 Sleep 300ms
 Enter
 Sleep 6s
@@ -56,6 +56,6 @@ Ctrl+C
 Sleep 300ms
 Ctrl+C
 Sleep 1s
-Type "byoclaude stop; kill %1"
+Type "byom stop; kill %1"
 Enter
 Sleep 1s

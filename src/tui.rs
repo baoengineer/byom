@@ -1,4 +1,4 @@
-//! `byoclaude config`: a tabbed home for models, providers, roles and usage.
+//! `byom config`: a tabbed home for models, providers, roles and usage.
 use std::io::IsTerminal;
 
 use anyhow::{Context, Result, bail};
@@ -376,7 +376,7 @@ impl App {
                 detail: if self.claude_models() {
                     "Claude Code's default".into()
                 } else {
-                    "Chosen by byoclaude".into()
+                    "Chosen by byom".into()
                 },
             }];
             choices.extend(
@@ -396,19 +396,30 @@ impl App {
                 Choice {
                     value: Some("true".into()),
                     label: "on".into(),
-                    detail: "Claude and other models in one session (when Claude Code is signed in)".into(),
+                    detail:
+                        "Claude and other models in one session (when Claude Code is signed in)"
+                            .into(),
                 },
                 Choice {
                     value: Some("false".into()),
                     label: "off".into(),
-                    detail: "Claude Code talks to Anthropic directly; byoclaude serves other models only".into(),
+                    detail:
+                        "Claude Code talks to Anthropic directly; byom serves other models only"
+                            .into(),
                 },
             ],
             Field::Context => {
-                let mut choices =
-                    vec![Choice { value: None, label: "Auto".into(), detail: "The main model's catalog window".into() }];
+                let mut choices = vec![Choice {
+                    value: None,
+                    label: "Auto".into(),
+                    detail: "The main model's catalog window".into(),
+                }];
                 for size in [128_000u64, 200_000, 272_000, 1_000_000] {
-                    choices.push(Choice { value: Some(size.to_string()), label: k(size), detail: String::new() });
+                    choices.push(Choice {
+                        value: Some(size.to_string()),
+                        label: k(size),
+                        detail: String::new(),
+                    });
                 }
                 choices
             }
@@ -427,9 +438,16 @@ impl App {
             _ => {
                 let mut choices: Vec<Choice> = CLAUDE_PROFILES
                     .iter()
-                    .map(|(id, detail)| Choice { value: Some((*id).into()), label: (*id).into(), detail: (*detail).into() })
+                    .map(|(id, detail)| Choice {
+                        value: Some((*id).into()),
+                        label: (*id).into(),
+                        detail: (*detail).into(),
+                    })
                     .collect();
-                if !CLAUDE_PROFILES.iter().any(|(id, _)| *id == self.config.behaves_as) {
+                if !CLAUDE_PROFILES
+                    .iter()
+                    .any(|(id, _)| *id == self.config.behaves_as)
+                {
                     choices.push(Choice {
                         value: Some(self.config.behaves_as.clone()),
                         label: self.config.behaves_as.clone(),
@@ -781,8 +799,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     .areas(frame.area());
 
     let mut title = vec![
-        Span::from(" byoclaude ").bold().fg(ACCENT),
-        Span::from("bring your own Claude ").dim(),
+        Span::from(" byom ").bold().fg(ACCENT),
+        Span::from("bring your own model ").dim(),
     ];
     if app.dirty() {
         title.push(Span::from(" modified ").fg(Color::Black).bg(Color::Yellow));
@@ -1168,9 +1186,10 @@ fn save(app: &mut App, path: &std::path::Path) {
             let transport_changed = app.config.transport != app.saved.transport;
             app.mark_saved();
             app.status = if transport_changed {
-                "Saved. Transport applies after the bridge restarts: byoclaude stop, then byoclaude run.".into()
+                "Saved. Transport applies after the bridge restarts: byom stop, then byom run."
+                    .into()
             } else {
-                "Saved. The next byoclaude run uses these settings.".into()
+                "Saved. The next byom run uses these settings.".into()
             };
         }
         Err(e) => app.status = format!("Save failed: {e:#}"),
@@ -1193,7 +1212,7 @@ pub fn run(runtime: tokio::runtime::Handle) -> Result<()> {
     let path = crate::store::config_path()?;
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         bail!(
-            "byoclaude config needs an interactive terminal; use `byoclaude config set` or edit {}",
+            "byom config needs an interactive terminal; use `byom config set` or edit {}",
             path.display()
         );
     }
@@ -1265,7 +1284,7 @@ pub fn run(runtime: tokio::runtime::Handle) -> Result<()> {
                     if let Err(e) = &outcome {
                         eprintln!("Sign-in failed: {e:#}");
                     }
-                    println!("\nPress Enter to return to byoclaude config.");
+                    println!("\nPress Enter to return to byom config.");
                     let mut line = String::new();
                     let _ = std::io::stdin().read_line(&mut line);
                     terminal = ratatui::try_init().context("restarting terminal UI")?;
@@ -1335,11 +1354,11 @@ mod tests {
         config.providers.insert(
             "zai".into(),
             crate::config::ProviderConfig {
-                api_key: "$BYOCLAUDE_TEST_NEVER_SET".into(),
+                api_key: "$BYOM_TEST_NEVER_SET".into(),
                 ..Default::default()
             },
         );
-        App::new(config, roster(), "~/.byoclaude/config.json".into())
+        App::new(config, roster(), "~/.byom/config.json".into())
     }
 
     #[test]

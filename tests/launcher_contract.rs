@@ -6,7 +6,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-const BIN: &str = env!("CARGO_BIN_EXE_byoclaude");
+const BIN: &str = env!("CARGO_BIN_EXE_byom");
 
 /// A port free at startup, shared by every launcher in this test binary.
 fn port() -> u16 {
@@ -32,10 +32,10 @@ fn command(home: &std::path::Path, bin: &std::path::Path) -> Command {
     let mut command = Command::new(BIN);
     command
         .env_clear()
-        .env("BYOCLAUDE_HOME", home)
+        .env("BYOM_HOME", home)
         .env("HOME", home)
         .env("PATH", bin)
-        .env("BYOCLAUDE_PORT", port().to_string());
+        .env("BYOM_PORT", port().to_string());
     command
 }
 
@@ -85,6 +85,7 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
         home.join("config.json"),
         serde_json::json!({
             "model": "configured-model",
+            "relay": true,
             "upstream_base_url": format!("http://{}/v1", upstream.local_addr().unwrap())
         })
         .to_string(),
@@ -194,7 +195,7 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
         for line in [
             format!("base=http://127.0.0.1:{}", PORT()),
             format!("token={key}"),
-            format!("headers=x-byoclaude-key: {key}"),
+            format!("headers=x-byom-key: {key}"),
             format!("model=openai/{model}"),
             format!("opus=openai/{model}"),
             format!("sonnet=openai/{model}"),
@@ -231,7 +232,7 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
     );
     for line in [
         "token=".to_owned(),
-        format!("headers=x-byoclaude-key: {key}"),
+        format!("headers=x-byom-key: {key}"),
         // The configured main model applies; unset slots keep Claude's defaults.
         "model=openai/configured-model".into(),
         "opus=".into(),

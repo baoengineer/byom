@@ -20,7 +20,7 @@ pub struct Config {
     pub subagent: String,
     /// Model IDs that Claude Code's opus/sonnet/haiku aliases resolve to.
     pub aliases: Aliases,
-    /// Relay Claude models to Anthropic on Claude Code's own sign-in.
+    /// Relay Claude models to Anthropic on Claude Code's own sign-in; off until the user opts in.
     pub relay: bool,
     pub upstream_base_url: String,
     /// Context window Claude Code compacts against; 0 uses the catalog value.
@@ -68,7 +68,7 @@ impl Default for Config {
             background: String::new(),
             subagent: String::new(),
             aliases: Aliases::default(),
-            relay: true,
+            relay: false,
             upstream_base_url: "https://api.openai.com/v1".to_owned(),
             context_tokens: 0,
             transport: "auto".to_owned(),
@@ -98,20 +98,20 @@ fn check_url(name: &str, value: &str) -> Result<()> {
 
 /// Resolve local state without creating directories or reading credentials.
 pub fn state_dir() -> Result<PathBuf> {
-    resolve_state_dir(env::var_os("BYOCLAUDE_HOME"), env::var_os("HOME"))
+    resolve_state_dir(env::var_os("BYOM_HOME"), env::var_os("HOME"))
 }
 
 fn resolve_state_dir(state_home: Option<OsString>, home: Option<OsString>) -> Result<PathBuf> {
     if let Some(path) = state_home {
         if path.is_empty() {
-            bail!("BYOCLAUDE_HOME must not be empty");
+            bail!("BYOM_HOME must not be empty");
         }
         return Ok(PathBuf::from(path));
     }
     let home = home
         .filter(|path| !path.is_empty())
-        .context("cannot resolve state directory: set BYOCLAUDE_HOME or HOME")?;
-    Ok(PathBuf::from(home).join(".byoclaude"))
+        .context("cannot resolve state directory: set BYOM_HOME or HOME")?;
+    Ok(PathBuf::from(home).join(".byom"))
 }
 
 /// Read only the local config.json. A missing file uses defaults; other errors do not.
@@ -297,7 +297,7 @@ mod tests {
     fn defaults_match_contract() {
         let config = Config::default();
         assert_eq!(config.model, "");
-        assert!(config.relay);
+        assert!(!config.relay);
         assert_eq!(config.upstream_base_url, "https://api.openai.com/v1");
         assert_eq!(config.transport, "auto");
         config.validate().unwrap();
@@ -311,7 +311,7 @@ mod tests {
         );
         assert_eq!(
             resolve_state_dir(None, Some("/home/user".into())).unwrap(),
-            PathBuf::from("/home/user/.byoclaude")
+            PathBuf::from("/home/user/.byom")
         );
         assert!(resolve_state_dir(Some("".into()), Some("/home/user".into())).is_err());
         assert!(resolve_state_dir(None, None).is_err());

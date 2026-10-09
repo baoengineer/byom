@@ -19,7 +19,7 @@ body:
     id: terms
     attributes:
       label: Plan terms
-      description: Link to the provider's terms if you sign in with a subscription plan; byoclaude only adds sign-ins that providers allow for third-party tools.
+      description: Link to the provider's terms if you sign in with a subscription plan; byom only adds sign-ins that providers allow for third-party tools.
   - type: textarea
     id: notes
     attributes:
