@@ -10,7 +10,7 @@ homepage = "https://github.com/baoengineer/byoclaude"
 readme = "README.md"
 keywords = ["claude-code", "openai", "chatgpt", "gpt", "cli"]
 categories = ["command-line-utilities", "development-tools"]
-exclude = [".github/", "tests/e2e/", "docs/demo/"]
+exclude = [".github/", "tests/e2e/", "docs/demo/", "site/"]
 
 [dependencies]
 anyhow = "1"

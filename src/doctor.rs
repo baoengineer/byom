@@ -90,9 +90,7 @@ pub async fn run() -> Result<()> {
         None => report.note("Bridge", "not running; `byoclaude run` starts it"),
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(8))
-        .build()?;
+    let client = crate::catalog::client(8)?;
     let mut usable = 0;
     for provider in crate::providers::all(&config) {
         let status = crate::accounts::status(&config, &provider, claude);

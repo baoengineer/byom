@@ -23,7 +23,7 @@ If a model fails before producing output and `fallbacks` names alternatives, the
 
 ## The Claude relay
 
-When Claude Code is signed in (`claude auth status --json` reports `loggedIn`) and `relay` is on, the launcher leaves Claude Code's own credential in place and sends the bridge key in `x-byoclaude-key` through `ANTHROPIC_CUSTOM_HEADERS`. Claude requests reach Anthropic with the body unchanged and Claude Code's headers, including its `Authorization`; only hop-by-hop and compression headers and `x-byoclaude-key` are dropped. Other Anthropic API paths Claude Code calls are passed through the same way. With the relay off or no Claude sign-in, the launcher sets `ANTHROPIC_AUTH_TOKEN` to the bridge key, hides Claude rows, and points every slot at other providers.
+When Claude Code is signed in (`claude auth status --json` reports `loggedIn`) and `relay` is on, the launcher leaves Claude Code's own credential in place and sends the bridge key in `x-byoclaude-key` through `ANTHROPIC_CUSTOM_HEADERS`. Claude requests reach Anthropic with the body unchanged and Claude Code's headers, including its `Authorization`; only hop-by-hop and compression headers and `x-byoclaude-key` are dropped. Other Anthropic API paths Claude Code calls are passed through the same way. With the relay off or no Claude sign-in, the launcher sets `ANTHROPIC_AUTH_TOKEN` to the bridge key. If an Anthropic API key is saved (`byoclaude login anthropic`), Claude requests use it and Claude models stay available; otherwise Claude rows are hidden and every slot points at other providers. A signed-in Claude Code's own credential always takes precedence over a saved key.
 
 ## Launcher (`launch.rs`)
 
@@ -42,7 +42,7 @@ The roster combines each usable provider's model list (`/v1/models` or `/models`
 
 ## State (`store.rs`)
 
-`~/.byoclaude` (or `$BYOCLAUDE_HOME`): `config.json`, `auth.json` (credentials keyed by provider, owner-only, written atomically under `auth.lock`), `bridge.key`, `host-id`, `cache/`, `logs/bridge.log` (metadata only), `plugin/`. A 0.1.0 `~/.byoclaude-rs` is copied over on first run.
+`~/.byoclaude` (or `$BYOCLAUDE_HOME`): `config.json`, `auth.json` (credentials keyed by provider, owner-only, written atomically under `auth.lock`), `bridge.key`, `host-id`, `cache/`, `logs/bridge.log` (metadata only), `logs/bridge.err` (the bridge's stderr), `plugin/`, `.relay-note-shown`. A 0.1.0 `~/.byoclaude-rs` is copied over on first run.
 
 ## Other modules
 

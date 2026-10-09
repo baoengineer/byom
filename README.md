@@ -4,7 +4,7 @@
 
 ![byoclaude config, then Claude Code with GPT and Claude models in /model](docs/demo/demo.gif)
 
-Claude Code stays unmodified. Its tools, subagents, hooks, MCP servers, skills, plan mode and session resume all work as usual. byoclaude runs a small local router that sends each request to the right provider by model ID:
+Claude Code stays unmodified. Its tools, subagents, hooks, MCP servers, skills, plan mode and session resume all work as usual (claude.ai connectors need the Claude relay). byoclaude runs a small local router that sends each request to the right provider by model ID:
 
 ```text
 claude (official, signed in as usual)
@@ -44,7 +44,7 @@ byoclaude                 # start Claude Code with every signed-in model
 
 Inside Claude Code, `/model` lists every model you can use. Start on a specific model with `byoclaude run openai/gpt-5.6-sol`; arguments after `--` go to `claude`, as in `byoclaude run -- --continue`.
 
-`byoclaude config` opens a home screen with four tabs: **Models** (the roster, and setting the main, background and subagent models), **Providers** (sign-ins and keys), **Roles** (every setting) and **Usage** (requests, tokens and estimated cost).
+`byoclaude config` opens a home screen with four tabs: **Models** (the roster, and setting the main, background and subagent models), **Providers** (sign-ins and keys), **Roles** (model slots, aliases, relay, context and transport) and **Usage** (requests, tokens and estimated cost).
 
 ## Providers
 
@@ -88,7 +88,7 @@ Each `byoclaude` session loads a small plugin:
 
 - A **byoclaude skill** tells Claude when another model helps (second opinions, cheap bulk work, long inputs) and how to delegate well. Claude loads the full guide with `byoclaude --skill`.
 - **One subagent per model**, named like `byoclaude:openai-gpt-5-6-sol`. Claude's Agent tool can only name Claude models directly, so these agents are how subagents and workflows run on other models.
-- `byoclaude models --json` gives Claude the live roster: each model's agent, context window, effort levels, price and status (`ready`, `capped`, `no-key`).
+- `byoclaude models --json` gives Claude the live roster: each model's agent, context window, effort levels, price and status (`ready`, `capped`, `no-key`, `signed-out`).
 
 ## Configuration
 
@@ -99,7 +99,7 @@ Settings live in `~/.byoclaude/config.json` (or `$BYOCLAUDE_HOME`). Edit them in
   "model": "openai/gpt-5.6-sol",
   "background": "groq/llama-3.3-70b-versatile",
   "subagent": "",
-  "aliases": { "haiku": "zai/glm-5.3-flash" },
+  "aliases": { "opus": "openai/gpt-6-astra" },
   "relay": true,
   "fallbacks": { "openai/gpt-6-astra": ["openai/gpt-5.6-sol", "kimi/k3"] },
   "providers": { "openrouter": { "models": ["qwen/qwen3-coder"] } }
@@ -109,13 +109,13 @@ Settings live in `~/.byoclaude/config.json` (or `$BYOCLAUDE_HOME`). Edit them in
 | Setting | Meaning |
 |---|---|
 | `model` | Main model; empty keeps Claude Code's default (with the relay) or picks the first available model |
-| `background` | Model for titles and summaries |
+| `background` | Model for titles and summaries; overrides `aliases.haiku` |
 | `subagent` | Model for subagents that don't name one |
 | `aliases` | What agents asking for `opus`, `sonnet` or `haiku` get |
 | `relay` | Relay Claude models on Claude Code's sign-in (default `true`) |
 | `fallbacks` | Models to try, in order, when a model fails before answering (plan cap, outage, missing key) |
-| `providers.<id>` | `api_key`, `base_url`, `protocol`, `models`, `disabled` |
-| `context_tokens` | Compaction window for non-Claude main models; `0` uses the catalog value |
+| `providers.<id>` | `name`, `api_key`, `base_url`, `protocol`, `models`, `disabled` |
+| `context_tokens` | Compaction window for the main model; `0` uses the catalog value for non-Claude models and Claude Code's own for Claude |
 | `transport` | ChatGPT plan transport: `auto` (WebSocket) or `http` |
 | `behaves_as` | Claude model whose handling Claude Code applies to other models |
 

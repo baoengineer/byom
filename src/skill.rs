@@ -17,8 +17,8 @@ others. The installed binary is the authority; this guide matches its version.
 Run `byoclaude models --json`. It returns the live roster:
 
 - `models[].id`: the model ID (`provider/model`, or a native Claude ID like `claude-opus-5-5`).
-- `models[].agent`: the subagent type that runs on that model (`byoclaude:<name>`).
-- `models[].status`: `ready`, `capped` (plan or rate limit hit recently), `no-key`, or `offline`.
+- `models[].agent`: the subagent type that runs on that model (`byoclaude:<name>`); null for Claude models, which the Agent tool names directly.
+- `models[].status`: `ready`, `capped` (plan or rate limit hit in the last five hours), `no-key`, or `signed-out`.
 - Context window, max output, reasoning, tool and image support, effort levels, and price
   per million tokens (an API-price estimate; plan usage is not billed per token).
 - `roles`: the session's main, background and subagent models.

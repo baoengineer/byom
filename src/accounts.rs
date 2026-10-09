@@ -52,6 +52,15 @@ fn read_secret(prompt: &str) -> Result<String> {
     }
 }
 
+/// A pasted key, stored as typed: never resolved as a `$VAR` or `!command` reference.
+fn pasted_key(input: &str) -> Result<Option<String>> {
+    let key = input.trim();
+    if key.chars().any(char::is_control) {
+        bail!("API key contains control characters");
+    }
+    Ok((!key.is_empty()).then(|| key.to_owned()))
+}
+
 fn choose(config: &crate::config::Config) -> Result<Provider> {
     let providers = crate::providers::all(config);
     if !std::io::stdin().is_terminal() {
@@ -113,11 +122,10 @@ pub async fn login(provider: Option<String>) -> Result<()> {
                 );
             }
             let key = read_secret("API key: ")?;
-            if key.is_empty() {
+            let Some(key) = pasted_key(&key)? else {
                 println!("No key saved.");
                 return Ok(());
-            }
-            crate::providers::resolve_key(&key).context("checking key")?;
+            };
             let _lock = crate::store::lock().await?;
             crate::store::auth::set(&provider.id, json!({"key": key}))?;
             println!("Key saved for {}.", provider.id);
@@ -187,4 +195,21 @@ pub fn print_status() -> Result<()> {
         }
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pasted_keys_are_stored_literally() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("ran");
+        let command = format!("!touch '{}'", marker.display());
+        assert_eq!(pasted_key(&command).unwrap(), Some(command.clone()));
+        assert!(!marker.exists());
+        assert_eq!(pasted_key(" sk-1\n").unwrap().as_deref(), Some("sk-1"));
+        assert_eq!(pasted_key("  ").unwrap(), None);
+        assert!(pasted_key("sk\u{7}1").is_err());
+    }
 }

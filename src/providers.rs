@@ -103,7 +103,7 @@ const BUILTINS: &[Builtin] = &[
         base_url: "https://api.z.ai/api/anthropic",
         auth: Auth::ApiKey,
         signup: "https://z.ai/subscribe",
-        note: "Coding Plan keys are for supported coding tools such as Claude Code; byoclaude passes Claude Code's client identity through unchanged.",
+        note: "Coding Plan keys are for supported coding tools such as Claude Code; requests keep Claude Code's own client identity.",
         models_dev: "zai-coding-plan",
     },
     Builtin {
@@ -376,6 +376,14 @@ pub fn resolve_key(reference: &str) -> anyhow::Result<String> {
 }
 
 /// The API key for a provider: config reference first, then auth.json.
+/// Whether an Anthropic API key is saved or configured, so Claude models work without
+/// Claude Code's own sign-in.
+pub fn claude_key(config: &Config) -> bool {
+    find(config, CLAUDE_PROVIDER)
+        .and_then(|p| api_key(config, &p).ok().flatten())
+        .is_some()
+}
+
 pub fn api_key(config: &Config, provider: &Provider) -> anyhow::Result<Option<String>> {
     if let Some(reference) = config
         .providers

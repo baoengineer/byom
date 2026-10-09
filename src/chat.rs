@@ -195,7 +195,15 @@ enum Open {
     None,
     Thinking,
     Text,
-    Tool(u64),
+    Tool,
+}
+
+/// A tool call assembled from stream chunks.
+struct ToolCall {
+    index: Option<u64>,
+    id: Option<String>,
+    name: String,
+    arguments: String,
 }
 
 /// Chat Completions stream chunks -> Anthropic events.
@@ -210,6 +218,8 @@ pub struct ChatTranslator {
     used_tool: bool,
     pub content: Vec<Value>,
     tool_json: String,
+    /// Tool calls are buffered until the provider finishes, as their chunks may interleave.
+    tools: Vec<ToolCall>,
     pub usage: Value,
 }
 
@@ -226,6 +236,7 @@ impl ChatTranslator {
             used_tool: false,
             content: Vec::new(),
             tool_json: String::new(),
+            tools: Vec::new(),
             usage: json!({"input_tokens": 0, "output_tokens": 0}),
         }
     }
@@ -256,7 +267,7 @@ impl ChatTranslator {
         if self.open == Open::None {
             return;
         }
-        if matches!(self.open, Open::Tool(_)) {
+        if self.open == Open::Tool {
             let json = std::mem::take(&mut self.tool_json);
             self.content[self.index - 1]["input"] =
                 serde_json::from_str(if json.trim().is_empty() { "{}" } else { &json })
@@ -355,28 +366,12 @@ impl ChatTranslator {
                 self.delta(json!({"type": "text_delta", "text": text}), &mut out);
             }
             for call in delta["tool_calls"].as_array().into_iter().flatten() {
-                let index = call["index"].as_u64().unwrap_or(0);
-                if self.open != Open::Tool(index) {
-                    self.used_tool = true;
-                    let id = call["id"]
-                        .as_str()
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| format!("call_{}", self.index));
-                    let block = json!({"type": "tool_use", "id": id, "name": call["function"]["name"], "input": {}});
-                    self.open_block(Open::Tool(index), block, &mut out);
-                }
-                if let Some(arguments) = call["function"]["arguments"]
-                    .as_str()
-                    .filter(|a| !a.is_empty())
-                {
-                    self.delta(
-                        json!({"type": "input_json_delta", "partial_json": arguments}),
-                        &mut out,
-                    );
-                }
+                self.used_tool = true;
+                self.tool_delta(call);
             }
             if let Some(reason) = choice["finish_reason"].as_str() {
                 self.close(&mut out);
+                self.flush_tools(&mut out);
                 self.stop = Some(match reason {
                     "length" => "max_tokens",
                     "content_filter" => "refusal",
@@ -389,14 +384,80 @@ impl ChatTranslator {
         Ok(out)
     }
 
-    /// End of stream: close blocks and emit the final message events.
-    pub fn finish(&mut self) -> Vec<Event> {
+    /// Add a tool call chunk to its call: matched by index, else by ID, else the latest call.
+    fn tool_delta(&mut self, call: &Value) {
+        let index = call["index"].as_u64();
+        let id = call["id"].as_str().filter(|id| !id.is_empty());
+        let found = match (id, index) {
+            (Some(id), _) => self
+                .tools
+                .iter()
+                .rposition(|t| t.id.as_deref() == Some(id))
+                .or_else(|| {
+                    self.tools
+                        .iter()
+                        .rposition(|t| index.is_some() && t.index == index && t.id.is_none())
+                }),
+            (None, Some(_)) => self.tools.iter().rposition(|t| t.index == index),
+            (None, None) => self.tools.len().checked_sub(1),
+        };
+        let position = found.unwrap_or_else(|| {
+            self.tools.push(ToolCall {
+                index,
+                id: None,
+                name: String::new(),
+                arguments: String::new(),
+            });
+            self.tools.len() - 1
+        });
+        let tool = &mut self.tools[position];
+        if tool.id.is_none() {
+            tool.id = id.map(str::to_owned);
+        }
+        if let Some(name) = call["function"]["name"].as_str()
+            && tool.name.is_empty()
+        {
+            tool.name = name.to_owned();
+        }
+        tool.arguments
+            .push_str(call["function"]["arguments"].as_str().unwrap_or(""));
+    }
+
+    /// Emit the buffered tool calls as tool_use blocks.
+    fn flush_tools(&mut self, out: &mut Vec<Event>) {
+        for tool in std::mem::take(&mut self.tools) {
+            let id = tool
+                .id
+                .unwrap_or_else(|| format!("toolu_{:024x}", rand::random::<u128>() >> 32));
+            let block = json!({"type": "tool_use", "id": id, "name": tool.name, "input": {}});
+            self.open_block(Open::Tool, block, out);
+            if !tool.arguments.is_empty() {
+                self.delta(
+                    json!({"type": "input_json_delta", "partial_json": tool.arguments}),
+                    out,
+                );
+            }
+            self.close(out);
+        }
+    }
+
+    /// End of stream: close blocks and emit the final message events. A stream that ends
+    /// without `[DONE]` (`done`) or a finish reason was cut off.
+    pub fn finish(&mut self, done: bool) -> Result<Vec<Event>, ProviderError> {
         let mut out = Vec::new();
         if self.finished {
-            return out;
+            return Ok(out);
+        }
+        if !done && self.stop.is_none() {
+            return Err(ProviderError::new(
+                502,
+                "api_error",
+                "The provider's stream ended before the response completed",
+            ));
         }
         self.start(&mut out);
         self.close(&mut out);
+        self.flush_tools(&mut out);
         let stop = self.stop.unwrap_or(if self.used_tool {
             "tool_use"
         } else {
@@ -412,7 +473,7 @@ impl ChatTranslator {
             data: json!({"type": "message_stop"}),
         });
         self.finished = true;
-        out
+        Ok(out)
     }
 
     pub fn message(&self) -> Value {
@@ -478,7 +539,7 @@ mod tests {
         ] {
             events.extend(t.handle(&chunk).ok().unwrap());
         }
-        events.extend(t.finish());
+        events.extend(t.finish(true).ok().unwrap());
         let message = t.message();
         assert_eq!(message["content"][0]["thinking"], "plan");
         assert_eq!(message["content"][1]["text"], "Hi");
@@ -495,6 +556,71 @@ mod tests {
             .filter(|e| e.name == "content_block_stop")
             .count();
         assert_eq!((starts, stops), (3, 3));
+    }
+
+    #[test]
+    fn interleaved_parallel_tool_calls_stay_separate() {
+        let mut t = ChatTranslator::new("m", false);
+        let mut events = Vec::new();
+        for chunk in [
+            json!({"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "a", "function": {"name": "Read", "arguments": "{\"p\":"}}]}}]}),
+            json!({"choices": [{"delta": {"tool_calls": [{"index": 1, "function": {"name": "Grep", "arguments": "{\"q\":"}}]}}]}),
+            json!({"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "1}"}}]}}]}),
+            json!({"choices": [{"delta": {"tool_calls": [{"index": 1, "function": {"arguments": "2}"}}]}}]}),
+            json!({"choices": [{"delta": {"tool_calls": [{"id": "c", "function": {"name": "Ls", "arguments": "{}"}}]}}]}),
+            json!({"choices": [{"delta": {"tool_calls": [{"id": "d", "function": {"name": "Ls", "arguments": "{\"r\":"}}]}}]}),
+            json!({"choices": [{"delta": {"tool_calls": [{"function": {"arguments": "3}"}}]}}]}),
+            json!({"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}),
+        ] {
+            events.extend(t.handle(&chunk).ok().unwrap());
+        }
+        events.extend(t.finish(true).ok().unwrap());
+        let content = t.message()["content"].as_array().unwrap().clone();
+        let summary: Vec<_> = content
+            .iter()
+            .map(|b| (b["name"].as_str().unwrap(), b["input"].clone()))
+            .collect();
+        assert_eq!(
+            summary,
+            [
+                ("Read", json!({"p": 1})),
+                ("Grep", json!({"q": 2})),
+                ("Ls", json!({})),
+                ("Ls", json!({"r": 3})),
+            ]
+        );
+        let ids: Vec<_> = content.iter().map(|b| b["id"].as_str().unwrap()).collect();
+        assert_eq!((ids[0], ids[2], ids[3]), ("a", "c", "d"));
+        assert!(ids[1].starts_with("toolu_"));
+        let starts: Vec<_> = events
+            .iter()
+            .filter(|e| e.name == "content_block_start")
+            .map(|e| e.data["index"].as_u64().unwrap())
+            .collect();
+        assert_eq!(starts, [0, 1, 2, 3]);
+        let mut other = ChatTranslator::new("m", false);
+        other
+            .handle(&json!({"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"name": "Read"}}]}, "finish_reason": "tool_calls"}]}))
+            .ok()
+            .unwrap();
+        assert_ne!(other.message()["content"][0]["id"], content[1]["id"]);
+    }
+
+    #[test]
+    fn stream_cut_off_before_finish_is_an_error() {
+        let mut t = ChatTranslator::new("m", false);
+        t.handle(&json!({"choices": [{"delta": {"content": "Hi"}}]}))
+            .ok()
+            .unwrap();
+        assert_eq!(t.finish(false).err().unwrap().status, 502);
+        assert!(!t.finished());
+        let events = t.finish(true).ok().unwrap();
+        assert_eq!(events.last().unwrap().name, "message_stop");
+        let mut t = ChatTranslator::new("m", false);
+        t.handle(&json!({"choices": [{"delta": {"content": "Hi"}, "finish_reason": "stop"}]}))
+            .ok()
+            .unwrap();
+        assert!(t.finish(false).is_ok());
     }
 
     #[test]

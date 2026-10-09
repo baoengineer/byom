@@ -26,6 +26,10 @@ const HOP: &[&str] = &[
     "trailer",
 ];
 
+/// Request headers sent to providers other than the Claude relay. Compatible servers reject
+/// Claude-only beta flags, so `anthropic-beta` goes only to Anthropic.
+const FORWARDED: &[&str] = &["content-type", "accept", "anthropic-version", "user-agent"];
+
 pub const BRIDGE_KEY_HEADER: &str = "x-byoclaude-key";
 
 pub struct Outbound<'a> {
@@ -56,48 +60,47 @@ pub fn prepare(
         provider.base_url.trim_end_matches('/'),
         request.path
     );
+    // Claude Code's own credential goes to Anthropic as sent; a saved key is used only when
+    // Claude Code is not signed in, and sends the bridge key instead.
+    let own_credential = provider.auth == Auth::ClaudeCode && {
+        let carries_bridge_key = [
+            request.headers.get("authorization"),
+            request.headers.get("x-api-key"),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|v| {
+            v.to_str()
+                .is_ok_and(|v| v.trim_start_matches("Bearer ") == bridge_key)
+        });
+        let has_credential = request.headers.contains_key("authorization")
+            || request.headers.contains_key("x-api-key");
+        has_credential && !carries_bridge_key
+    };
     let mut headers = HeaderMap::new();
     for (name, value) in request.headers {
         let lower = name.as_str();
-        if HOP.contains(&lower) || lower == BRIDGE_KEY_HEADER {
-            continue;
+        let keep = if own_credential {
+            !HOP.contains(&lower) && lower != BRIDGE_KEY_HEADER
+        } else {
+            FORWARDED.contains(&lower)
+                || (lower == "anthropic-beta" && provider.id == crate::providers::CLAUDE_PROVIDER)
+        };
+        if keep {
+            headers.append(name.clone(), value.clone());
         }
-        headers.append(name.clone(), value.clone());
     }
     match provider.auth {
+        Auth::ClaudeCode if own_credential => {}
         Auth::ClaudeCode if api_key.is_none() => {
-            // The bridge key in Authorization means Claude Code is not signed in to Claude.
-            let carries_bridge_key = [
-                request.headers.get("authorization"),
-                request.headers.get("x-api-key"),
-            ]
-            .into_iter()
-            .flatten()
-            .any(|v| {
-                v.to_str()
-                    .is_ok_and(|v| v.trim_start_matches("Bearer ") == bridge_key)
+            return Err(Refusal {
+                status: 401,
+                kind: "authentication_error",
+                message: "Claude models need Claude Code signed in to Claude (run `claude auth login`), or an Anthropic API key: byoclaude login anthropic".into(),
             });
-            let has_credential = request.headers.contains_key("authorization")
-                || request.headers.contains_key("x-api-key");
-            if carries_bridge_key || !has_credential {
-                return Err(Refusal {
-                    status: 401,
-                    kind: "authentication_error",
-                    message: "Claude models need Claude Code signed in to Claude (run `claude auth login`), or an Anthropic API key: byoclaude login anthropic".into(),
-                });
-            }
         }
-        Auth::None => {
-            headers.remove("authorization");
-            headers.remove("x-api-key");
-        }
+        Auth::None => {}
         _ => {
-            headers.remove("authorization");
-            headers.remove("x-api-key");
-            // Compatible servers reject Claude-only beta flags.
-            if provider.id != crate::providers::CLAUDE_PROVIDER {
-                headers.remove("anthropic-beta");
-            }
             let key = api_key.ok_or_else(|| Refusal {
                 status: 401,
                 kind: "authentication_error",
@@ -237,6 +240,7 @@ mod tests {
             ("anthropic-beta", "b"),
             ("host", "127.0.0.1"),
             ("accept-encoding", "gzip, br"),
+            ("x-claude-code-session-id", "s1"),
         ]);
         let body = Bytes::from_static(br#"{"model":"claude-opus-5-5",  "x":1}"#);
         let req = Outbound {
@@ -259,6 +263,7 @@ mod tests {
         assert_eq!(out["anthropic-beta"], "b");
         assert!(out.get(BRIDGE_KEY_HEADER).is_none() && out.get("host").is_none());
         assert!(out.get("accept-encoding").is_none());
+        assert_eq!(out["x-claude-code-session-id"], "s1");
         assert_eq!(sent, body);
     }
 
@@ -287,11 +292,60 @@ mod tests {
     }
 
     #[test]
+    fn claude_sign_in_wins_over_a_saved_key() {
+        let signed_in = headers(&[("authorization", "Bearer sk-ant-oat-x")]);
+        let bridge_only = headers(&[
+            ("authorization", "Bearer k"),
+            (BRIDGE_KEY_HEADER, "k"),
+            ("anthropic-beta", "b"),
+            ("anthropic-version", "2023-06-01"),
+            ("x-claude-code-session-id", "s1"),
+        ]);
+        let outbound = |h| Outbound {
+            method: Method::POST,
+            path: "/v1/messages",
+            headers: h,
+            body: Bytes::new(),
+        };
+        let anthropic = provider("anthropic", Auth::ClaudeCode);
+        let (_, out, _) = prepare(
+            &anthropic,
+            None,
+            Some("sk-ant-api-saved"),
+            "k",
+            &outbound(&signed_in),
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(out["authorization"], "Bearer sk-ant-oat-x");
+        assert!(out.get("x-api-key").is_none());
+        let (_, out, _) = prepare(
+            &anthropic,
+            None,
+            Some("sk-ant-api-saved"),
+            "k",
+            &outbound(&bridge_only),
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(out["x-api-key"], "sk-ant-api-saved");
+        assert_eq!(out["authorization"], "Bearer sk-ant-api-saved");
+        assert_eq!(out["anthropic-beta"], "b");
+        assert_eq!(out["anthropic-version"], "2023-06-01");
+        assert!(out.get("x-claude-code-session-id").is_none());
+        assert!(out.get(BRIDGE_KEY_HEADER).is_none());
+    }
+
+    #[test]
     fn compatible_provider_swaps_credential_model_and_betas() {
         let h = headers(&[
             ("authorization", "Bearer sk-ant-oat-x"),
             ("anthropic-beta", "b"),
             ("user-agent", "claude-cli/2"),
+            ("content-type", "application/json"),
+            ("x-claude-code-session-id", "s1"),
+            ("x-stainless-os", "MacOS"),
+            ("cookie", "c=1"),
         ]);
         let req = Outbound {
             method: Method::POST,
@@ -312,10 +366,17 @@ mod tests {
         assert_eq!(out["x-api-key"], "key1");
         assert!(out.get("anthropic-beta").is_none());
         assert_eq!(out["user-agent"], "claude-cli/2");
+        assert_eq!(out["content-type"], "application/json");
+        assert_eq!(out.len(), 4);
         assert_eq!(
             serde_json::from_slice::<Value>(&sent).unwrap()["model"],
             "kimi-k3"
         );
         assert!(prepare(&provider("kimi", Auth::ApiKey), None, None, "k", &req).is_err());
+        let (_, out, _) = prepare(&provider("local", Auth::None), None, None, "k", &req)
+            .ok()
+            .unwrap();
+        assert_eq!(out.len(), 2);
+        assert!(out.get("authorization").is_none());
     }
 }

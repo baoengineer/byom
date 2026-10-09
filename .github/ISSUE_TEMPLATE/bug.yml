@@ -1,0 +1,32 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: byoclaude doctor
+      description: Output of `byoclaude doctor`. Remove anything private.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: byoclaude logs
+      description: Output of `byoclaude logs -n 20` around the failure. It holds metadata only, no prompts or keys.
+      render: text
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "`byoclaude --version`, `claude --version`, and your OS"
+    validations:
+      required: true

@@ -130,7 +130,7 @@ pub fn roster_json(
         &crate::catalog::cached().unwrap_or_default(),
         roster,
         None,
-        config.relay && claude,
+        config.relay && claude || crate::providers::claude_key(config),
     )
     .ok();
     json!({

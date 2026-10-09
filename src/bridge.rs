@@ -41,8 +41,35 @@ pub struct Bridge {
     startup: Config,
     /// Client for forwarded routes; no overall timeout, as streams can be long.
     forward: reqwest::Client,
-    /// Resolved API keys by provider, so `!command` keys run once per bridge.
-    keys: std::sync::Mutex<std::collections::HashMap<String, String>>,
+    /// `!command` key output by command, so each command runs once per bridge.
+    keys: KeyCache,
+}
+
+type KeyCache = std::sync::Mutex<std::collections::HashMap<String, String>>;
+
+/// A provider's API key; only `!command` output is cached, so saved and literal keys
+/// follow config.json and auth.json as they change.
+fn cached_key(
+    keys: &KeyCache,
+    config: &Config,
+    provider: &crate::providers::Provider,
+) -> Result<Option<String>> {
+    let reference = config
+        .providers
+        .get(&provider.id)
+        .map(|c| c.api_key.as_str())
+        .unwrap_or("");
+    if !reference.starts_with('!') {
+        return crate::providers::api_key(config, provider);
+    }
+    if let Some(key) = keys.lock().unwrap().get(reference) {
+        return Ok(Some(key.clone()));
+    }
+    let key = crate::providers::resolve_key(reference)?;
+    keys.lock()
+        .unwrap()
+        .insert(reference.to_owned(), key.clone());
+    Ok(Some(key))
 }
 
 pub async fn serve(port: u16) -> Result<()> {
@@ -208,8 +235,19 @@ async fn read_body(request: Request) -> Result<Incoming, Box<Response>> {
 }
 
 fn parse_json(bytes: &[u8]) -> Result<Value, Box<Response>> {
-    serde_json::from_slice(bytes)
-        .map_err(|_| Box::new(error(400, "invalid_request_error", "Invalid JSON request")))
+    match serde_json::from_slice(bytes) {
+        Ok(value @ Value::Object(_)) => Ok(value),
+        Ok(_) => Err(Box::new(error(
+            400,
+            "invalid_request_error",
+            "Request body must be a JSON object",
+        ))),
+        Err(_) => Err(Box::new(error(
+            400,
+            "invalid_request_error",
+            "Invalid JSON request",
+        ))),
+    }
 }
 
 /// Whether the request carries a credential other than the bridge key (Claude Code's own).
@@ -289,17 +327,7 @@ impl Bridge {
         config: &Config,
         provider: &crate::providers::Provider,
     ) -> Result<Option<String>> {
-        if let Some(key) = self.keys.lock().unwrap().get(&provider.id) {
-            return Ok(Some(key.clone()));
-        }
-        let key = crate::providers::api_key(config, provider)?;
-        if let Some(key) = &key {
-            self.keys
-                .lock()
-                .unwrap()
-                .insert(provider.id.clone(), key.clone());
-        }
-        Ok(key)
+        cached_key(&self.keys, config, provider)
     }
 
     /// Forward an Anthropic-protocol request and stream the answer back unchanged.
@@ -529,6 +557,7 @@ impl Bridge {
             decoder: crate::sse::SseDecoder::default(),
             queue: VecDeque::new(),
             ended: false,
+            done: false,
         };
         let mut translator = crate::chat::ChatTranslator::new(requested, thinking);
         let mut frames = VecDeque::new();
@@ -913,6 +942,7 @@ struct ChatSource {
     decoder: crate::sse::SseDecoder,
     queue: VecDeque<Value>,
     ended: bool,
+    done: bool,
 }
 
 impl ChatSource {
@@ -926,7 +956,7 @@ impl ChatSource {
                 return translator.handle(&chunk);
             }
             if self.ended {
-                return Ok(translator.finish());
+                return translator.finish(self.done);
             }
             let next = tokio::time::timeout(crate::upstream::EVENT_TIMEOUT, self.body.next()).await;
             let frames = match next {
@@ -956,6 +986,7 @@ impl ChatSource {
             for frame in frames {
                 if frame.data.trim() == "[DONE]" {
                     self.ended = true;
+                    self.done = true;
                     break;
                 }
                 match serde_json::from_str(&frame.data) {
@@ -1126,6 +1157,41 @@ mod tests {
             scanner.usage(),
             json!({"input_tokens": 12, "cache_read_input_tokens": 30, "output_tokens": 42})
         );
+    }
+
+    #[test]
+    fn json_bodies_must_be_objects() {
+        assert!(parse_json(b"{}").is_ok());
+        for body in [&b"[1]"[..], b"null", b"\"x\"", b"{"] {
+            assert_eq!(parse_json(body).err().unwrap().status(), 400);
+        }
+    }
+
+    #[test]
+    fn only_command_keys_are_cached() {
+        let provider = crate::providers::find(&Config::default(), "groq").unwrap();
+        let keys = KeyCache::default();
+        let with_key = |reference: &str| {
+            let mut config = Config::default();
+            config
+                .providers
+                .entry(provider.id.clone())
+                .or_default()
+                .api_key = reference.into();
+            config
+        };
+        let literal = |r| cached_key(&keys, &with_key(r), &provider).unwrap();
+        assert_eq!(literal("sk-1").as_deref(), Some("sk-1"));
+        assert_eq!(literal("sk-2").as_deref(), Some("sk-2"));
+        assert!(keys.lock().unwrap().is_empty());
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("key");
+        fs::write(&file, "sk-a").unwrap();
+        let command = format!("!cat '{}'", file.display());
+        assert_eq!(literal(&command).as_deref(), Some("sk-a"));
+        fs::write(&file, "sk-b").unwrap();
+        assert_eq!(literal(&command).as_deref(), Some("sk-a"));
+        assert_eq!(literal(&format!("{command} ")).as_deref(), Some("sk-b"));
     }
 
     #[test]

@@ -271,10 +271,10 @@ async fn wait_for_bridge(client: &reqwest::Client, child: &mut Child) -> Result<
 
 /// What a session runs on: model slots, context window and the model picker.
 ///
-/// With the relay active, unset slots keep Claude Code's own Claude defaults; without it,
-/// every slot needs a non-Claude model.
+/// When Claude models are available (the relay, or an Anthropic API key), unset slots keep
+/// Claude Code's own Claude defaults; otherwise every slot needs a non-Claude model.
 pub struct Plan {
-    pub relay: bool,
+    pub claude: bool,
     /// Main model (`ANTHROPIC_MODEL`); `None` keeps Claude Code's default.
     pub model: Option<String>,
     /// Background model for titles and summaries (the haiku slot).
@@ -379,7 +379,7 @@ pub fn plan(
     models: &[crate::catalog::Model],
     roster: &[crate::catalog::Entry],
     requested: Option<String>,
-    relay: bool,
+    claude: bool,
 ) -> Result<Plan> {
     use crate::providers::{canonical, is_claude};
     let mut rows = rows(config, models, roster);
@@ -391,17 +391,17 @@ pub fn plan(
         .or_else(|| pick(&config.model));
     let model = match model {
         Some(model) => Some(model),
-        None if relay => None,
+        None if claude => None,
         None => Some(first.clone().context(
             "no models available. Sign in with `byoclaude login`, or sign in to Claude Code to use Claude models",
         )?),
     };
-    if !relay && model.as_deref().is_some_and(is_claude) {
+    if !claude && model.as_deref().is_some_and(is_claude) {
         bail!(
-            "Claude models need Claude Code signed in to Claude (`claude auth login`) and \"relay\" enabled"
+            "Claude models need Claude Code signed in to Claude (`claude auth login`) and \"claude\" enabled"
         );
     }
-    // Without the relay, Claude's own slots are unusable, so they follow byoclaude's choices.
+    // Without the claude, Claude's own slots are unusable, so they follow byoclaude's choices.
     let small = rows
         .iter()
         .find(|r| r.id.contains("luna") || r.id.contains("mini"))
@@ -409,11 +409,11 @@ pub fn plan(
     let background = pick(&config.background)
         .or_else(|| pick(&config.aliases.haiku))
         .or_else(|| {
-            (!relay)
+            (!claude)
                 .then(|| small.clone().or_else(|| model.clone()))
                 .flatten()
         });
-    let follow = |alias: &str| pick(alias).or_else(|| (!relay).then(|| model.clone()).flatten());
+    let follow = |alias: &str| pick(alias).or_else(|| (!claude).then(|| model.clone()).flatten());
     let opus = follow(&config.aliases.opus);
     let sonnet = follow(&config.aliases.sonnet);
     let subagent = pick(&config.subagent);
@@ -457,10 +457,10 @@ pub fn plan(
         })
         .collect();
     let settings = serde_json::json!({
-        "modelPicker": {"replaceBuiltInOptions": !relay, "options": options}
+        "modelPicker": {"replaceBuiltInOptions": !claude, "options": options}
     });
     Ok(Plan {
-        relay,
+        claude,
         model,
         background,
         opus,
@@ -520,7 +520,7 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         &models,
         &crate::catalog::roster_cached(),
         model,
-        relay,
+        relay || crate::providers::claude_key(&config),
     )?;
     let key = ensure_bridge(&client()?).await?;
     if relay {

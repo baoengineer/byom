@@ -1,0 +1,27 @@
+name: Provider or model request
+description: Ask for a provider or model to be supported
+labels: [provider]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: API it speaks
+      options: [Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, Other or not sure]
+    validations:
+      required: true
+  - type: textarea
+    id: terms
+    attributes:
+      label: Plan terms
+      description: Link to the provider's terms if you sign in with a subscription plan; byoclaude only adds sign-ins that providers allow for third-party tools.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Base URL, model IDs, and whether a custom provider (`providers.<id>` in config) already works for you.

@@ -45,12 +45,18 @@ pub fn parse(catalog: &Value) -> Result<Vec<Model>> {
         .collect())
 }
 
+/// Client for provider APIs; redirects are not followed, so credentials stay with their host.
+pub fn client(timeout_secs: u64) -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+}
+
 /// Fetch the catalog for the signed-in account and refresh the local cache.
 pub async fn fetch() -> Result<Vec<Model>> {
     let token = crate::auth::access_token().await?;
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()?
+    let response = client(15)?
         .get(MODELS_URL)
         .bearer_auth(&token)
         .send()
@@ -220,10 +226,7 @@ async fn discover(
 
 /// Rebuild the roster from every provider that is usable now, and cache it.
 pub async fn refresh(config: &crate::config::Config) -> Vec<Entry> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .unwrap_or_default();
+    let client = client(30).unwrap_or_default();
     let dev = models_dev(&client).await;
     let mut roster = Vec::new();
     for provider in crate::providers::all(config) {
@@ -324,5 +327,26 @@ mod tests {
         assert_eq!(models.len(), 2);
         assert_eq!(models[0].effort_levels, ["low", "max"]);
         assert!(!models[1].listed);
+    }
+
+    #[tokio::test]
+    async fn client_does_not_follow_redirects() {
+        let app = axum::Router::new()
+            .route(
+                "/start",
+                axum::routing::get(|| async { axum::response::Redirect::temporary("/landing") }),
+            )
+            .route("/landing", axum::routing::get(|| async { "landed" }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await });
+        let response = super::client(5)
+            .unwrap()
+            .get(format!("http://{addr}/start"))
+            .header("x-api-key", "k")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 307);
     }
 }

@@ -227,8 +227,9 @@ impl App {
         self.saved = self.config.clone();
     }
 
-    fn relay(&self) -> bool {
-        self.config.relay && self.claude
+    /// Whether Claude models are available: the relay, or an Anthropic API key.
+    fn claude_models(&self) -> bool {
+        self.config.relay && self.claude || crate::providers::claude_key(&self.config)
     }
 
     /// Every provider, including disabled ones, so they can be re-enabled here.
@@ -258,7 +259,7 @@ impl App {
         };
         match provider.auth {
             Auth::ClaudeCode => {
-                self.relay()
+                self.claude_models()
                     || crate::providers::api_key(&self.config, &provider)
                         .ok()
                         .flatten()
@@ -281,7 +282,7 @@ impl App {
             .iter()
             .filter(|e| {
                 if crate::providers::is_claude(&e.id) {
-                    self.relay()
+                    self.claude_models()
                 } else {
                     e.listed
                 }
@@ -302,7 +303,7 @@ impl App {
             &crate::catalog::cached().unwrap_or_default(),
             &self.roster,
             None,
-            self.relay(),
+            self.claude_models(),
         )
         .ok()
     }
@@ -327,7 +328,7 @@ impl App {
     /// Current value as shown in the Roles tab.
     pub fn display(&self, field: Field) -> String {
         let plan = self.plan();
-        let fallback = if self.relay() {
+        let fallback = if self.claude_models() {
             "Claude Code default"
         } else {
             "-"
@@ -372,7 +373,7 @@ impl App {
             let mut choices = vec![Choice {
                 value: None,
                 label: "Auto".into(),
-                detail: if self.relay() {
+                detail: if self.claude_models() {
                     "Claude Code's default".into()
                 } else {
                     "Chosen by byoclaude".into()
