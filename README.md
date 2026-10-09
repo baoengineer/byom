@@ -31,7 +31,13 @@ byom is an independent project, not affiliated with or endorsed by Anthropic, Op
 
 Requires macOS or Linux, [Claude Code](https://code.claude.com/docs/en/setup) (tested with 2.1.295), and at least one model: a ChatGPT Plus or Pro plan, an API key for a supported provider, a local Ollama or LM Studio server, or Claude (see [Claude models](#claude-models)).
 
-Download a binary from [Releases](https://github.com/baoengineer/byom/releases), for example on an Apple silicon Mac:
+With Homebrew:
+
+```sh
+brew install baoengineer/tap/byom
+```
+
+Or download a binary from [Releases](https://github.com/baoengineer/byom/releases), for example on an Apple silicon Mac:
 
 ```sh
 curl -LO https://github.com/baoengineer/byom/releases/latest/download/byom-v0.4.1-aarch64-apple-darwin.tar.gz
@@ -122,6 +128,8 @@ byom logs [-n N]                      recent requests: model, route, latency, to
 **Does it change Claude Code?** No. byom starts the official `claude` with a base URL, a settings file and a session plugin. Run `claude` directly and nothing from byom is there.
 
 **What does it store?** Settings, credentials you add, a local bridge key and request metadata, all in `~/.byom`. See [SECURITY.md](SECURITY.md).
+
+**How is it different from claude-code-router?** Both route Claude Code's requests to other models. byom's focus is different in four ways: it signs in to your ChatGPT plan through OpenAI's official open-source app flow, so no API key; Claude stays in the same `/model` list as the other models; Claude gets one subagent per model and can run model teams, so it can hand work to other models itself; and it ships as one Rust binary that finds your models without a config file.
 
 **Coming from byoclaude?** byom was called byoclaude until 0.4.0. The first run copies `~/.byoclaude` to `~/.byom`; agent names change from `byoclaude:` to `byom:`.
 

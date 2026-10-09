@@ -2,7 +2,7 @@
 //! providers. Requests and responses stream through; status and headers are preserved.
 use axum::{
     body::Body,
-    http::{HeaderMap, HeaderName, Method, StatusCode},
+    http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode},
     response::Response,
 };
 use bytes::Bytes;
@@ -122,6 +122,17 @@ pub fn prepare(
                 headers.insert(HeaderName::from_static("x-api-key"), value);
             }
         }
+    }
+    // OpenRouter's app attribution: requests count toward byom in its public app rankings.
+    if provider.id == "openrouter" {
+        headers.insert(
+            HeaderName::from_static("http-referer"),
+            HeaderValue::from_static("https://github.com/baoengineer/byom"),
+        );
+        headers.insert(
+            HeaderName::from_static("x-title"),
+            HeaderValue::from_static("byom"),
+        );
     }
     let claude = provider.id == crate::providers::CLAUDE_PROVIDER;
     let body = rewrite_body(&request.body, upstream_model, !claude);
@@ -318,6 +329,28 @@ mod tests {
             .status,
             401
         );
+    }
+
+    #[test]
+    fn openrouter_requests_carry_app_attribution() {
+        let h = headers(&[("authorization", "Bearer k")]);
+        let req = Outbound {
+            method: Method::POST,
+            path: "/v1/messages",
+            headers: &h,
+            body: Bytes::new(),
+        };
+        let (_, out, _) = prepare(
+            &provider("openrouter", Auth::ApiKey),
+            None,
+            Some("or-key"),
+            "k",
+            &req,
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(out["x-title"], "byom");
+        assert_eq!(out["http-referer"], "https://github.com/baoengineer/byom");
     }
 
     #[test]
