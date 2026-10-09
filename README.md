@@ -19,6 +19,10 @@ byoclaude router (127.0.0.1) ─┬─ claude-*        → Anthropic, relayed on
 
 Claude can use the other models too. Each session loads a byoclaude skill and one subagent per model, so you can say "get a second opinion from GPT" or "have a fast model scan these files", and Claude picks the right one.
 
+When being wrong is costly, Claude can ask a [panel](#panels): several models from different providers answer the same question, each able to read the repo and run tests, and a judge from another provider compares them. The verdict comes back into the session:
+
+![Claude asks a panel of K3, GLM-5.3 and MiniMax-M3; the pane tracks each panelist, then the verdict comes back as a message](docs/demo/panel.gif)
+
 byoclaude is an independent project, not affiliated with or endorsed by Anthropic, OpenAI or any other provider.
 
 ## Requirements
@@ -115,8 +119,6 @@ By default byoclaude picks `panel.size` ready models from the model picker's ros
 A panel costs several model runs plus the judge's, and takes minutes. Inside a session, Claude calls one when being wrong is costly, or when you ask.
 
 ### Panels inside Claude Code
-
-![Claude asks a panel of K3, GLM-5.3 and MiniMax-M3; the pane tracks each panelist, then the verdict comes back as a message](docs/demo/panel.gif)
 
 Each `byoclaude` session loads a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) (Claude Code 2.1.287 or later) that makes panels part of the session:
 
