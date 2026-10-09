@@ -17,7 +17,7 @@ anyhow = "1"
 base64 = "0.22"
 sha2 = "0.10"
 fs2 = "0.4"
-jsonwebtoken = { version = "9", default-features = false, features = ["use_pem"] }
+jsonwebtoken = { version = "10.3", default-features = false, features = ["use_pem", "rust_crypto"] }
 uuid = { version = "1", features = ["v4"] }
 axum = "0.8"
 bytes = "1"
