@@ -15,11 +15,17 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Launch Claude Code with every signed-in model available (the default command).
+    ///
+    /// `byom run [model] [claude arguments]`: a first argument that is not a flag names the
+    /// main model, such as openai/gpt-5.6-sol; the rest go to claude, as in
+    /// `byom run --resume <id>`. Plain `byom --resume <id>` works too.
     Run {
-        /// Main model for this session, such as openai/gpt-5.6-sol or claude-opus-5-5.
-        model: Option<String>,
-        /// Arguments passed to claude, after `--`.
-        #[arg(last = true)]
+        /// Optional model, then arguments for claude.
+        #[arg(
+            trailing_var_arg = true,
+            allow_hyphen_values = true,
+            value_name = "MODEL] [CLAUDE ARGS"
+        )]
         args: Vec<String>,
     },
     /// Sign in to a provider: ChatGPT, or save an API key.
@@ -85,19 +91,43 @@ enum ConfigAction {
     Path,
 }
 
+/// `byom --resume <id>` and other claude flags mean `byom run --resume <id>`.
+fn claude_flags_run(mut argv: Vec<String>) -> Vec<String> {
+    let own = ["-h", "--help", "-V", "--version", "--skill"];
+    if argv
+        .get(1)
+        .is_some_and(|a| a.starts_with('-') && !own.contains(&a.as_str()))
+    {
+        argv.insert(1, "run".into());
+    }
+    argv
+}
+
+/// A leading argument that is not a flag is the model; a leading `--` is dropped.
+fn split_run(mut args: Vec<String>) -> (Option<String>, Vec<String>) {
+    let model = match args.first() {
+        Some(first) if !first.starts_with('-') => Some(args.remove(0)),
+        _ => None,
+    };
+    if args.first().is_some_and(|a| a == "--") {
+        args.remove(0);
+    }
+    (model, args)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = Cli::parse_from(claude_flags_run(std::env::args().collect()));
     byom::store::migrate()?;
     if cli.skill {
         print!("{}", byom::skill::GUIDE);
         return Ok(());
     }
-    match cli.command.unwrap_or(Command::Run {
-        model: None,
-        args: Vec::new(),
-    }) {
-        Command::Run { model, args } => byom::launch::run(model, args).await,
+    match cli.command.unwrap_or(Command::Run { args: Vec::new() }) {
+        Command::Run { args } => {
+            let (model, args) = split_run(args);
+            byom::launch::run(model, args).await
+        }
         Command::Login { provider } => byom::accounts::login(provider).await,
         Command::Logout { provider } => byom::accounts::logout(provider).await,
         Command::Auth | Command::AuthStatus => byom::accounts::print_status(),
@@ -127,5 +157,71 @@ async fn main() -> Result<()> {
         Command::Stop => byom::launch::stop().await,
         Command::Logs { lines } => byom::roster::print_logs(lines),
         Command::Bridge { port } => byom::bridge::serve(port).await,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(args: &[&str]) -> Vec<String> {
+        args.iter().map(|a| a.to_string()).collect()
+    }
+
+    #[test]
+    fn claude_flags_start_a_session() {
+        assert_eq!(
+            claude_flags_run(argv(&["byom", "--resume", "x"])),
+            argv(&["byom", "run", "--resume", "x"])
+        );
+        assert_eq!(
+            claude_flags_run(argv(&["byom", "-c"])),
+            argv(&["byom", "run", "-c"])
+        );
+        assert_eq!(
+            claude_flags_run(argv(&["byom", "--version"])),
+            argv(&["byom", "--version"])
+        );
+        assert_eq!(
+            claude_flags_run(argv(&["byom", "models"])),
+            argv(&["byom", "models"])
+        );
+    }
+
+    #[test]
+    fn run_takes_an_optional_model_then_claude_arguments() {
+        assert_eq!(
+            split_run(argv(&["kimi/k3", "--resume", "x"])),
+            (Some("kimi/k3".into()), argv(&["--resume", "x"]))
+        );
+        assert_eq!(
+            split_run(argv(&["--resume", "x"])),
+            (None, argv(&["--resume", "x"]))
+        );
+        assert_eq!(
+            split_run(argv(&["--", "--continue"])),
+            (None, argv(&["--continue"]))
+        );
+        assert_eq!(
+            split_run(argv(&["kimi/k3", "--", "-p", "hi"])),
+            (Some("kimi/k3".into()), argv(&["-p", "hi"]))
+        );
+        assert_eq!(split_run(Vec::new()), (None, Vec::new()));
+    }
+
+    #[test]
+    fn run_accepts_claude_flags_without_a_separator() {
+        let cli = Cli::parse_from(argv(&[
+            "byom",
+            "run",
+            "openai/gpt-5.6-sol",
+            "--resume",
+            "x",
+            "-p",
+        ]));
+        let Some(Command::Run { args }) = cli.command else {
+            panic!("expected run")
+        };
+        assert_eq!(args, argv(&["openai/gpt-5.6-sol", "--resume", "x", "-p"]));
     }
 }

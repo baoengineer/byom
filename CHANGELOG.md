@@ -2,6 +2,7 @@
 
 ## 0.4.1
 
+- Claude Code's flags pass straight through: `byom --resume <id>`, `byom -c`, `byom -p "..."`, and `byom run <model> --continue` without `--`.
 - A local model server that isn't running (Ollama, LM Studio) shows as `offline` in `byom models`, is left out of the session, and fails at once with a clear error that Claude Code does not retry.
 - byom's per-model agents get Claude Code's built-in tools only, without MCP tools, which keeps each request to another provider much smaller.
 - When OpenAI closes the WebSocket before a response has produced anything, byom reconnects once and resends the turn instead of returning an API error to Claude Code.

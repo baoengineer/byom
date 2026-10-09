@@ -53,7 +53,7 @@ byom login        # pick a provider: ChatGPT sign-in, or paste an API key
 byom              # start Claude Code with every signed-in model
 ```
 
-Inside Claude Code, `/model` lists every model you can use. Start on a specific model with `byom run openai/gpt-5.6-sol`; arguments after `--` go to `claude`, as in `byom run -- --continue`.
+Inside Claude Code, `/model` lists every model you can use. Claude Code's own flags work as usual: `byom --resume <id>`, `byom -c`, `byom -p "..."`. Start on a specific model with `byom run openai/gpt-5.6-sol`, and add flags after it, as in `byom run kimi/k3 --continue`.
 
 `byom config` opens a home screen with four tabs: **Models** (the roster; set the main, background and subagent models), **Providers** (sign-ins and keys), **Roles** (model slots, aliases, relay, context, transport) and **Usage** (requests, tokens, estimated cost).
 
@@ -104,7 +104,8 @@ Then ask for a team, for example: "spawn a reviewer on GPT-5.6-Sol, an implement
 ## Commands
 
 ```text
-byom [run [model] [-- claude args]]   start Claude Code
+byom [claude flags]                   start Claude Code, as in byom --resume <id>
+byom run <model> [claude flags]       start on a specific model
 byom login [provider]                 sign in, or save an API key
 byom models [--json] [--refresh]      the model roster
 byom config [get|set|unset|path]      settings (no argument: the config screen)
