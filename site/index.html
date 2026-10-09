@@ -214,8 +214,6 @@ section { padding-block: 72px; border-top: 1px solid var(--line); }
 .tx .arg { color: var(--t-dim); }
 .tx .done { padding-left: 1.2em; }
 .tx p + p { margin-top: 8px; }
-.tx pre { margin: 12px 0 0; font: inherit; color: var(--t-dim); white-space: pre; }
-.tx b { color: var(--t-head); font-weight: 700; }
 
 /* Start */
 .steps { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
@@ -230,8 +228,6 @@ section { padding-block: 72px; border-top: 1px solid var(--line); }
 /* Recording */
 figure { margin: 0; }
 figure { max-width: 980px; margin-inline: auto; }
-.rec-panel { aspect-ratio: 1440 / 860; }
-#recording { display: grid; gap: 48px; }
 .rec { aspect-ratio: 1240 / 720; max-width: 100%; width: 100%; background: var(--t-bg); border-radius: 12px; overflow: hidden; }
 .rec img { display: block; width: 100%; height: 100%; object-fit: cover; }
 figcaption { font-size: .8125rem; color: var(--muted); margin-top: 12px; }
@@ -387,35 +383,6 @@ footer .row nav { display: flex; gap: 18px; }
       </div>
     </section>
 
-    <section id="panel">
-      <div class="split">
-        <div class="sec-head">
-          <h2>Or ask a panel.</h2>
-          <p class="lede">When being wrong is costly, <code>byoclaude panel</code> puts the question to several models at once, on the plans you already pay for. Each one answers independently as a full Claude Code agent that can read the repo and run your tests. A judge from another provider compares the reports without seeing model names, and Claude gets the verdict.</p>
-        </div>
-        <div>
-          <div class="term">
-            <div class="term-bar"><span>zsh · ~/myapp</span><span>panel</span></div>
-            <div class="term-body tx">
-              <span class="u"><span class="g">$</span> byoclaude panel "Is the retry logic in src/pool.rs safe under concurrent release?"</span>
-              <p class="arg">panel: openai/gpt-6-astra, kimi/k3, deepseek/deepseek-v4-pro</p>
-              <p class="arg">judge: claude-opus-5-5 (relay)</p>
-              <p class="arg">3 panelists running · 3 reports · judging</p>
-              <p><b>Agreement</b> (all three): release() can return a connection to the pool twice when a retry races it.</p>
-              <p><b>Conflict</b>: does retry() need the pool lock?<br><span class="arg">gpt-6-astra: yes, it reads idle before locking (src/pool.rs:88)<br>k3: no, idle is only written under the lock</span><br>Judge: gpt-6-astra is right; line 88 reads idle unlocked.</p>
-              <p><b>Recommendation</b>: take the lock before reading idle in retry(), and add a concurrent release test. Confidence: high.</p>
-<pre>model                     time   tokens  cost
-openai/gpt-6-astra        2m40s  51k     plan
-kimi/k3                   3m12s  64k     $0.06
-deepseek/deepseek-v4-pro  2m55s  58k     $0.03
-claude-opus-5-5 (judge)   1m20s  39k     plan</pre>
-            </div>
-          </div>
-          <p class="hint"><span>Abbreviated and illustrative. Add <code>--attempt</code> and each model makes the change in its own git worktree; <code>byoclaude panel apply</code> takes the winner. Inside a session it is a native tool: Claude keeps working, progress shows above the prompt and in a <code>/panel</code> pane, and the verdict comes back as a message.</span></p>
-        </div>
-      </div>
-    </section>
-
     <section id="start">
       <div class="sec-head">
         <h2>Three commands.</h2>
@@ -431,10 +398,6 @@ claude-opus-5-5 (judge)   1m20s  39k     plan</pre>
       <figure>
         <div class="rec"><img src="demo.gif" alt="Recording: byoclaude config, then Claude Code answering on GPT-5.6-Sol, then /model listing Claude and GPT models together" loading="lazy" width="1240" height="720"></div>
         <figcaption>Recorded, not rendered: <code>byoclaude config</code>, a session on GPT-5.6-Sol, then <code>/model</code> with Claude and GPT side by side, against local mock servers.</figcaption>
-      </figure>
-      <figure>
-        <div class="rec rec-panel"><img src="panel.gif" alt="Recording: Claude asks a byoclaude panel of K3, GLM-5.3 and MiniMax-M3 with DeepSeek-V4-Pro as judge; a pane shows each panelist finishing, then the verdict arrives as a message and Claude summarizes it" loading="lazy" width="1440" height="860"></div>
-        <figcaption>A panel inside Claude Code: the tool returns at once, the pane and the line above the prompt track each panelist, and the verdict comes back as a message. Recorded against local mock servers.</figcaption>
       </figure>
     </section>
   </main>

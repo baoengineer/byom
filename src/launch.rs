@@ -495,7 +495,7 @@ pub fn claude_signed_in() -> bool {
 const RELAY_NOTE: &str = "byoclaude: Claude models in this session reach Anthropic through byoclaude's local relay, using Claude Code's own sign-in. Request bodies and Claude Code's headers pass through unchanged, but Anthropic has not explicitly approved relaying subscription traffic. To keep Claude Code talking to Anthropic directly, run: byoclaude config set relay false";
 
 /// Print the relay note once per state directory.
-pub fn relay_note() {
+fn relay_note() {
     let Ok(marker) = crate::store::home().map(|h| h.join(".relay-note-shown")) else {
         return;
     };
@@ -504,67 +504,6 @@ pub fn relay_note() {
     }
     eprintln!("{RELAY_NOTE}\n");
     let _ = crate::store::write_private(&marker, b"");
-}
-
-/// Start the bridge if needed and return its key.
-pub async fn bridge_key() -> Result<String> {
-    ensure_bridge(&client()?).await
-}
-
-/// The `claude` command for a plan: sanitized environment, the bridge's base URL and key,
-/// model slots, and `--settings` with the model picker rows. Arguments added later follow.
-pub fn claude_command(
-    plan: &Plan,
-    key: &str,
-    plugin: Option<&std::path::Path>,
-) -> std::process::Command {
-    let mut command = std::process::Command::new("claude");
-    if plan.relay {
-        sanitize_relay(&mut command);
-    } else {
-        sanitize_claude(&mut command);
-    }
-    let bridge_header = format!("{}: {key}", crate::relay::BRIDGE_KEY_HEADER);
-    let headers = match std::env::var("ANTHROPIC_CUSTOM_HEADERS") {
-        Ok(existing) if !existing.trim().is_empty() => format!("{existing}\n{bridge_header}"),
-        _ => bridge_header,
-    };
-    command.arg("--settings").arg(plan.settings.to_string());
-    if let Some(plugin) = plugin {
-        command.arg("--plugin-dir").arg(plugin);
-    }
-    command
-        .env("ANTHROPIC_BASE_URL", format!("http://127.0.0.1:{}", port()))
-        .env("ANTHROPIC_CUSTOM_HEADERS", headers)
-        // Tool search defers tool definitions that non-Claude models never receive.
-        .env("ENABLE_TOOL_SEARCH", "false");
-    if !plan.relay {
-        command
-            .env("ANTHROPIC_AUTH_TOKEN", key)
-            .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
-            // claude.ai connectors need claude.ai auth, which the bridge key replaces; turning
-            // them off also removes Claude Code's warning about it.
-            .env("ENABLE_CLAUDEAI_MCP_SERVERS", "false");
-    }
-    let slots = [
-        ("ANTHROPIC_MODEL", &plan.model),
-        ("ANTHROPIC_DEFAULT_OPUS_MODEL", &plan.opus),
-        ("ANTHROPIC_DEFAULT_SONNET_MODEL", &plan.sonnet),
-        ("ANTHROPIC_DEFAULT_HAIKU_MODEL", &plan.background),
-        ("ANTHROPIC_SMALL_FAST_MODEL", &plan.background),
-        ("CLAUDE_CODE_SUBAGENT_MODEL", &plan.subagent),
-    ];
-    for (name, value) in slots {
-        if let Some(value) = value {
-            command.env(name, value);
-        }
-    }
-    if let Some(tokens) = plan.context_tokens {
-        command
-            .env("CLAUDE_CODE_MAX_CONTEXT_TOKENS", tokens.to_string())
-            .env("CLAUDE_CODE_AUTO_COMPACT_WINDOW", tokens.to_string());
-    }
-    command
 }
 
 /// Launch Claude Code against the local bridge.
@@ -587,15 +526,53 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     if relay {
         relay_note();
     }
-    let plugin = crate::skill::prepare(&plan.rows)?;
-    let mut command = claude_command(&plan, &key, Some(&plugin));
-    command.args(args);
-    // The session mod starts panels with this binary and reads the gate setting.
-    if let Ok(exe) = std::env::current_exe() {
-        command.env("BYOCLAUDE_BIN", exe);
+    let mut command = std::process::Command::new("claude");
+    if relay {
+        sanitize_relay(&mut command);
+    } else {
+        sanitize_claude(&mut command);
     }
-    if config.panel.gate {
-        command.env("BYOCLAUDE_PANEL_GATE", "1");
+    let bridge_header = format!("{}: {key}", crate::relay::BRIDGE_KEY_HEADER);
+    let headers = match std::env::var("ANTHROPIC_CUSTOM_HEADERS") {
+        Ok(existing) if !existing.trim().is_empty() => format!("{existing}\n{bridge_header}"),
+        _ => bridge_header,
+    };
+    let plugin = crate::skill::prepare(&plan.rows)?;
+    command
+        .arg("--settings")
+        .arg(plan.settings.to_string())
+        .arg("--plugin-dir")
+        .arg(&plugin)
+        .args(args)
+        .env("ANTHROPIC_BASE_URL", format!("http://127.0.0.1:{}", port()))
+        .env("ANTHROPIC_CUSTOM_HEADERS", headers)
+        // Tool search defers tool definitions that non-Claude models never receive.
+        .env("ENABLE_TOOL_SEARCH", "false");
+    if !relay {
+        command
+            .env("ANTHROPIC_AUTH_TOKEN", &key)
+            .env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+            // claude.ai connectors need claude.ai auth, which the bridge key replaces; turning
+            // them off also removes Claude Code's warning about it.
+            .env("ENABLE_CLAUDEAI_MCP_SERVERS", "false");
+    }
+    let slots = [
+        ("ANTHROPIC_MODEL", &plan.model),
+        ("ANTHROPIC_DEFAULT_OPUS_MODEL", &plan.opus),
+        ("ANTHROPIC_DEFAULT_SONNET_MODEL", &plan.sonnet),
+        ("ANTHROPIC_DEFAULT_HAIKU_MODEL", &plan.background),
+        ("ANTHROPIC_SMALL_FAST_MODEL", &plan.background),
+        ("CLAUDE_CODE_SUBAGENT_MODEL", &plan.subagent),
+    ];
+    for (name, value) in slots {
+        if let Some(value) = value {
+            command.env(name, value);
+        }
+    }
+    if let Some(tokens) = plan.context_tokens {
+        command
+            .env("CLAUDE_CODE_MAX_CONTEXT_TOKENS", tokens.to_string())
+            .env("CLAUDE_CODE_AUTO_COMPACT_WINDOW", tokens.to_string());
     }
     #[cfg(unix)]
     {

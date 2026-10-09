@@ -14,9 +14,6 @@
 //! SUBAGENTTEST prompt, one Agent call to the subagent named by `MOCK_SUBAGENT`, default `probe`), `count_tokens` returns a
 //! count, and any other path returns `{}`. Each request is logged to `MOCK_ANTHROPIC_LOG`.
 //!
-//! `MOCK_PANEL` names a panel script (docs/demo/panel.json) for the panel GIF: the main
-//! session calls the panel tool, and panelists and the judge answer through StructuredOutput.
-//!
 //! Usage: cargo run --example mock_openai -- <port> [anthropic-port]
 use std::collections::HashSet;
 use std::io::Write;
@@ -181,14 +178,6 @@ async fn anthropic(port: u16, log: String, issued: Arc<Mutex<HashSet<&'static st
             if uri.path() != "/v1/messages" {
                 return axum::Json(json!({})).into_response();
             }
-            if let Some((blocks, stop)) = panel_script(&request).await {
-                let sse = anthropic_sse(&blocks, stop);
-                return (
-                    [("content-type", "text/event-stream"), ("anthropic-ratelimit-unified-status", "allowed")],
-                    sse,
-                )
-                    .into_response();
-            }
             let text = request["messages"].to_string();
             let tools = request["tools"].to_string();
             let call = text.contains("SUBAGENTTEST")
@@ -218,83 +207,10 @@ async fn anthropic(port: u16, log: String, issued: Arc<Mutex<HashSet<&'static st
         .expect("serve anthropic mock");
 }
 
-/// The panel demo (`MOCK_PANEL` names a script such as docs/demo/panel.json): the main
-/// session calls the panel tool, panelists and the judge answer through StructuredOutput.
-async fn panel_script(request: &Value) -> Option<(Vec<Value>, &'static str)> {
-    let script: Value =
-        serde_json::from_slice(&std::fs::read(std::env::var("MOCK_PANEL").ok()?).ok()?).ok()?;
-    let tools = request["tools"].as_array().cloned().unwrap_or_default();
-    let has = |name: &str| tools.iter().any(|t| t["name"] == name);
-    // The turn is everything after the last assistant message; Claude Code adds system-role
-    // messages there, including a prompt a mod submits.
-    let messages = request["messages"].as_array().cloned().unwrap_or_default();
-    let start = messages
-        .iter()
-        .rposition(|m| m["role"] == "assistant")
-        .map_or(0, |i| i + 1);
-    let last_text = Value::Array(messages[start..].to_vec()).to_string();
-    let answered = last_text.contains("\"tool_result\"");
-    let text = |s: &Value| {
-        (
-            vec![json!({"type": "text", "text": s.as_str().unwrap_or("")})],
-            "end_turn",
-        )
-    };
-    if has("StructuredOutput") {
-        if answered {
-            return Some(text(&json!("Done.")));
-        }
-        let schema = tools
-            .iter()
-            .find(|t| t["name"] == "StructuredOutput")
-            .map(|t| t["input_schema"].to_string())
-            .unwrap_or_default();
-        let input = if schema.contains("\"agreement\"") {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            script["verdict"].clone()
-        } else {
-            let entry = &script["reports"][request["model"].as_str().unwrap_or("")];
-            tokio::time::sleep(std::time::Duration::from_secs(
-                entry["delay"].as_u64().unwrap_or(1),
-            ))
-            .await;
-            entry["report"].clone()
-        };
-        return Some((
-            vec![
-                json!({"type": "tool_use", "id": "toolu_structured", "name": "StructuredOutput", "input": input}),
-            ],
-            "tool_use",
-        ));
-    }
-    if !has("mcp__byoclaude__panel") {
-        return None;
-    }
-    if last_text.contains("byoclaude panel") && last_text.contains("finished") && !answered {
-        return Some(text(&script["summary"]));
-    }
-    if answered && last_text.contains("toolu_panel") {
-        return Some(text(&script["ack"]));
-    }
-    if !answered && last_text.to_lowercase().contains("panel") {
-        let input = json!({"question": script["question"], "models": script["models"], "judge": script["judge"]});
-        return Some((
-            vec![
-                json!({"type": "tool_use", "id": "toolu_panel", "name": "mcp__byoclaude__panel", "input": input}),
-            ],
-            "tool_use",
-        ));
-    }
-    None
-}
-
-/// Each response gets its own message ID; Claude Code merges assistant messages that share one.
-static NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-
 fn anthropic_sse(blocks: &[Value], stop: &str) -> String {
     let mut events = vec![(
         "message_start",
-        json!({"type": "message_start", "message": {"id": format!("msg_mock{}", NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)), "type": "message",
+        json!({"type": "message_start", "message": {"id": "msg_mock", "type": "message",
         "role": "assistant", "model": "claude-mock", "content": [], "stop_reason": null, "stop_sequence": null,
         "usage": {"input_tokens": 10, "output_tokens": 0}}}),
     )];

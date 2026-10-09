@@ -6,10 +6,6 @@
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 (cd "$root" && cargo build --quiet --release --bin byoclaude --example mock_openai)
-# The session mod: static checks and its own tests, with no session.
-claude plugin validate "$root/mod" >/dev/null
-(cd "$root/mod" && claude plugin test . >/dev/null) || { echo "FAIL mod tests (claude plugin test mod)"; exit 1; }
-echo "PASS mod validate and tests"
 bin=$root/target/release/byoclaude
 mock=$root/target/release/examples/mock_openai
 work=$(mktemp -d)

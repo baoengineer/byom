@@ -19,10 +19,6 @@ byoclaude router (127.0.0.1) ─┬─ claude-*        → Anthropic, relayed on
 
 Claude can use the other models too. Each session loads a byoclaude skill and one subagent per model, so you can say "get a second opinion from GPT" or "have a fast model scan these files", and Claude picks the right one.
 
-When being wrong is costly, Claude can ask a [panel](#panels): several models from different providers answer the same question, each able to read the repo and run tests, and a judge from another provider compares them. The verdict comes back into the session:
-
-![Claude asks a panel of K3, GLM-5.3 and MiniMax-M3; the pane tracks each panelist, then the verdict comes back as a message](docs/demo/panel.gif)
-
 byoclaude is an independent project, not affiliated with or endorsed by Anthropic, OpenAI or any other provider.
 
 ## Requirements
@@ -94,41 +90,6 @@ Each `byoclaude` session loads a small plugin:
 - **One subagent per model**, named like `byoclaude:openai-gpt-5-6-sol`. Claude's Agent tool can only name Claude models directly, so these agents are how subagents and workflows run on other models.
 - `byoclaude models --json` gives Claude the live roster: each model's agent, context window, effort levels, price and status (`ready`, `capped`, `no-key`).
 
-## Panels
-
-A panel puts one question to several models at once. Each panelist runs as a headless Claude Code agent through the bridge, on the plans and keys you already have, and can read the repository and run your tests to back its claims. A judge from another provider compares the reports, which it sees as Panelist A, B and C without model names, and prints a verdict: where the panelists agree, where they conflict and who is right, findings only one made, blind spots, a recommendation and a confidence.
-
-```sh
-byoclaude panel "Is the retry logic in src/pool.rs safe under concurrent release?"
-byoclaude panel --attempt --test "cargo test" "Make Pool::release safe under concurrent callers"
-```
-
-With `--attempt`, each panelist makes the change in its own git worktree, which starts from HEAD plus your uncommitted tracked changes (untracked files are not copied). byoclaude saves each worktree's diff as a patch and, when a test command is set (`--test` or `panel.test_command`), runs it there, so the judge sees real test results; the verdict adds a ranking, a winner and what to merge from the others. Nothing is applied automatically:
-
-```sh
-byoclaude panel show <id>                # the verdict and each patch
-byoclaude panel apply <id> [panelist]    # the winner, or the named patch
-```
-
-`panel apply` runs `git apply`, and when the tree has moved on since the panel, falls back to a three-way merge (`git apply --3way`), which stages its result and can leave conflict markers.
-
-Panelists and the judge run in Claude Code's restricted mode: your Claude Code user, project and local settings do not apply to them, and their file tools stay inside the working directory and the repository (each attempt's own worktree). Opinion panelists and the judge cannot change files; their shell is limited to read-only commands and the test command.
-
-By default byoclaude picks `panel.size` ready models from the model picker's roster, from different providers, the highest-priced model of each provider first and local models last, and a judge from a provider not on the panel. `--models a,b,c` and `--judge <id>` choose them yourself. A member that fails or times out is reported and the rest continue; a panel needs two reports to be judged. Each run is recorded in `~/.byoclaude/panels/<id>/` with every member's time, tokens and estimated cost (plan usage for Claude on the relay and the ChatGPT plan; cached input is priced at the full input rate, so estimates are upper bounds); `byoclaude panel list` lists them and `--json` prints the full record.
-
-A panel costs several model runs plus the judge's, and takes minutes. Inside a session, Claude calls one when being wrong is costly, or when you ask.
-
-### Panels inside Claude Code
-
-Each `byoclaude` session loads a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) (Claude Code 2.1.287 or later) that makes panels part of the session:
-
-- **A panel tool for Claude** (`mcp__byoclaude__panel`). In an interactive session it returns at once, so Claude keeps working; when the judge finishes, the verdict arrives as a new message.
-- **Progress while you work**: a line above the prompt (`panel <id> · opinion · 2/3 reports · 1m 12s`) and a pane with each panelist's state and time, then the verdict. After an attempt panel, the pane has an **Apply** button per patch.
-- **`/panel <question>`** starts a panel yourself, even while Claude is busy; `/panel` alone opens the pane.
-- **An optional gate** (`byoclaude config set panel.gate true`): before a risky shell command (`rm -rf`, force push, `git reset --hard`, `git clean -f`, `DROP TABLE`, `terraform apply`, `kubectl delete`), Claude Code asks you to run it, ask a panel first, or refuse.
-
-In `claude -p`, the tool waits for the verdict and returns it. Where mods are off (`--safe-mode`, `--bare`, `disableAllHooks`), Claude runs `byoclaude panel` with Bash instead, and `/byoclaude:panel <question>` asks Claude to. Like any mod, it runs inside Claude Code with your permissions.
-
 ## Configuration
 
 Settings live in `~/.byoclaude/config.json` (or `$BYOCLAUDE_HOME`). Edit them in `byoclaude config`, with `byoclaude config set/get/unset`, or by hand:
@@ -157,12 +118,6 @@ Settings live in `~/.byoclaude/config.json` (or `$BYOCLAUDE_HOME`). Edit them in
 | `context_tokens` | Compaction window for non-Claude main models; `0` uses the catalog value |
 | `transport` | ChatGPT plan transport: `auto` (WebSocket) or `http` |
 | `behaves_as` | Claude model whose handling Claude Code applies to other models |
-| `panel.models` | Panel members (`--models`); empty picks automatically |
-| `panel.judge` | Judge (`--judge`); empty picks a model from a provider not on the panel |
-| `panel.size` | Panel size when picking automatically (`-n`, default `3`) |
-| `panel.test_command` | Test command for attempts, also allowed for opinion panelists (`--test`) |
-| `panel.timeout_secs` | Seconds each panelist, the judge and each test run may take (`--timeout`, default `900`) |
-| `panel.gate` | Before risky shell commands, ask whether to run them, ask a panel first, or refuse (default `false`) |
 
 Credentials are stored in `~/.byoclaude/auth.json` (owner-only), or referenced from config as `$ENV_VAR` or `!command`.
 
@@ -177,9 +132,6 @@ Credentials are stored in `~/.byoclaude/auth.json` (owner-only), or referenced f
 | `byoclaude config`, `config get/set/unset/path` | Settings |
 | `byoclaude doctor` | Check Claude Code, sign-ins, the relay, the bridge and each provider |
 | `byoclaude logs [-n N]` | Recent requests: model, route, latency, tokens |
-| `byoclaude panel [--attempt] [--models a,b,c] [--judge id] [-n N] [--test cmd] [--timeout secs] [--json] <question>` | Ask a panel; `-` reads the question from stdin |
-| `byoclaude panel list`, `panel show <id> [--json]` | Recorded panels |
-| `byoclaude panel apply <id> [panelist]` | Apply an attempt's patch |
 | `byoclaude status`, `stop` | The local bridge |
 | `byoclaude --skill` | The guide Claude reads |
 
@@ -200,7 +152,7 @@ Each provider's own plan limits apply. ChatGPT also caps each connected app sepa
 ```sh
 cargo test
 tests/e2e/run.sh          # real Claude Code against local mocks of OpenAI and Anthropic; no plan usage
-vhs docs/demo/demo.tape   # re-record the demo GIF (docs/demo/panel.tape: the panel GIF)
+vhs docs/demo/demo.tape   # re-record the demo GIF
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROVIDER.md](docs/PROVIDER.md), [docs/ROADMAP.md](docs/ROADMAP.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
