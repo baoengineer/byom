@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Assemble site
-        run: cp docs/demo/demo.gif site/demo.gif
+        run: cp docs/demo/demo.mp4 docs/demo/demo.jpg site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
