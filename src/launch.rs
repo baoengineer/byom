@@ -567,8 +567,20 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         .args(args)
         .env("ANTHROPIC_BASE_URL", format!("http://127.0.0.1:{}", port()))
         .env("ANTHROPIC_CUSTOM_HEADERS", headers)
-        // Tool search defers tool definitions that non-Claude models never receive.
-        .env("ENABLE_TOOL_SEARCH", "false");
+        // Tool search works only on Anthropic's API; other main models need every tool listed.
+        .env(
+            "ENABLE_TOOL_SEARCH",
+            if plan.claude
+                && plan
+                    .model
+                    .as_deref()
+                    .is_none_or(crate::providers::is_claude)
+            {
+                "true"
+            } else {
+                "false"
+            },
+        );
     if config.teams {
         command.env("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1");
     }

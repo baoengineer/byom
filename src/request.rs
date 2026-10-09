@@ -53,6 +53,9 @@ pub fn translate(request: &Value, options: &Options) -> Result<Translated> {
     let mut tools = Vec::new();
     let mut web_search = false;
     for tool in request["tools"].as_array().into_iter().flatten() {
+        if crate::providers::claude_only_tool(tool) {
+            continue;
+        }
         match tool["type"].as_str() {
             None | Some("custom") => {
                 let Some(name) = tool["name"].as_str() else {
@@ -472,7 +475,7 @@ mod tests {
     fn tools_images_and_results() {
         let request = json!({
             "model": "m",
-            "tools": [{"name": "Read", "input_schema": {"$schema": "x", "type": "object"}}, {"type": "web_search_20250305", "name": "web_search"}],
+            "tools": [{"name": "Read", "input_schema": {"$schema": "x", "type": "object"}}, {"type": "web_search_20250305", "name": "web_search"}, {"name": "ToolSearch", "input_schema": {}}, {"name": "DeferredToolPlaceholder", "defer_loading": true}],
             "tool_choice": {"type": "any", "disable_parallel_tool_use": true},
             "messages": [
                 {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AAA"}}, {"type": "text", "text": "look"}]},
@@ -484,6 +487,7 @@ mod tests {
         assert_eq!(t.body["tool_choice"], "required");
         assert_eq!(t.body["parallel_tool_calls"], false);
         assert_eq!(t.body["tools"][0]["type"], "web_search");
+        assert_eq!(t.input[0]["tools"].as_array().unwrap().len(), 1);
         assert!(
             t.input[0]["tools"][0]["parameters"]
                 .get("$schema")

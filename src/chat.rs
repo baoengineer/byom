@@ -58,6 +58,7 @@ pub fn translate_request(request: &Value, model: &str, usage_option: bool) -> Va
         .into_iter()
         .flatten()
         .filter(|t| t["type"].is_null() || t["type"] == "custom")
+        .filter(|t| !crate::providers::claude_only_tool(t))
         .filter_map(|t| {
             let mut parameters = t["input_schema"].clone();
             if let Some(schema) = parameters.as_object_mut() {

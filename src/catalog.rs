@@ -138,12 +138,37 @@ pub fn roster_exists() -> bool {
     roster_path().is_ok_and(|p| p.exists())
 }
 
+/// The cached roster, plus ChatGPT catalog models added since it was built.
 pub fn roster_cached() -> Vec<Entry> {
-    roster_path()
+    let mut roster: Vec<Entry> = roster_path()
         .ok()
         .and_then(|p| std::fs::read(p).ok())
         .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if roster.iter().any(|e| e.provider == "openai") {
+        for model in cached().unwrap_or_default() {
+            let entry = chatgpt_entry(model, "openai");
+            if !roster.iter().any(|e| e.id == entry.id) {
+                roster.push(entry);
+            }
+        }
+    }
+    roster
+}
+
+fn chatgpt_entry(m: Model, provider: &str) -> Entry {
+    Entry {
+        id: crate::providers::canonical(&m.slug),
+        provider: provider.to_owned(),
+        name: m.display_name,
+        context_window: m.context_window,
+        reasoning: !m.effort_levels.is_empty(),
+        tools: true,
+        images: true,
+        effort_levels: m.effort_levels,
+        listed: m.listed,
+        ..Default::default()
+    }
 }
 
 /// models.dev data, refreshed at most daily.
@@ -241,18 +266,7 @@ pub async fn refresh(config: &crate::config::Config) -> Vec<Entry> {
                 };
                 models
                     .into_iter()
-                    .map(|m| Entry {
-                        id: crate::providers::canonical(&m.slug),
-                        provider: provider.id.clone(),
-                        name: m.display_name,
-                        context_window: m.context_window,
-                        reasoning: !m.effort_levels.is_empty(),
-                        tools: true,
-                        images: true,
-                        effort_levels: m.effort_levels,
-                        listed: m.listed,
-                        ..Default::default()
-                    })
+                    .map(|m| chatgpt_entry(m, &provider.id))
                     .collect()
             }
             Auth::ClaudeCode => dev_models

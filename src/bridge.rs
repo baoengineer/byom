@@ -1038,6 +1038,7 @@ struct UsageScanner {
     decoder: crate::sse::SseDecoder,
     input: u64,
     cached: u64,
+    written: u64,
     output: u64,
     seen: bool,
 }
@@ -1066,6 +1067,9 @@ impl UsageScanner {
             if let Some(n) = usage["cache_read_input_tokens"].as_u64() {
                 self.cached = self.cached.max(n);
             }
+            if let Some(n) = usage["cache_creation_input_tokens"].as_u64() {
+                self.written = self.written.max(n);
+            }
             if let Some(n) = usage["output_tokens"].as_u64() {
                 self.output = self.output.max(n);
             }
@@ -1076,7 +1080,12 @@ impl UsageScanner {
         if !self.seen {
             return Value::Null;
         }
-        json!({"input_tokens": self.input, "cache_read_input_tokens": self.cached, "output_tokens": self.output})
+        json!({
+            "input_tokens": self.input,
+            "cache_read_input_tokens": self.cached,
+            "cache_creation_input_tokens": self.written,
+            "output_tokens": self.output,
+        })
     }
 }
 
@@ -1183,7 +1192,7 @@ mod tests {
         scanner.push(b.as_bytes());
         assert_eq!(
             scanner.usage(),
-            json!({"input_tokens": 12, "cache_read_input_tokens": 30, "output_tokens": 42})
+            json!({"input_tokens": 12, "cache_read_input_tokens": 30, "cache_creation_input_tokens": 0, "output_tokens": 42})
         );
     }
 

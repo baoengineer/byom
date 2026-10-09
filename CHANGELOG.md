@@ -2,6 +2,9 @@
 
 ## 0.4.1
 
+- Claude Code's tool search stays on when the main model is Claude, so Claude requests list MCP tools on demand instead of all at once (about half the prompt in a measured headless call). Other providers never receive the tool search tools.
+- `byom models` lists ChatGPT models added to your account after the cached roster was built.
+- The request log records cache writes as well as cache reads.
 - `byom stop` refuses while sessions are using the bridge (requests in the last ten minutes) unless `--force`, since stopping it leaves open sessions with "connection refused". `byom restart` replaces the bridge in place, for upgrades.
 - Claude Code's flags pass straight through: `byom --resume <id>`, `byom -c`, `byom -p "..."`, and `byom run <model> --continue` without `--`.
 - A local model server that isn't running (Ollama, LM Studio) shows as `offline` in `byom models`, is left out of the session, and fails at once with a clear error that Claude Code does not retry.

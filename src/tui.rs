@@ -763,7 +763,8 @@ pub fn usage(log: &[Value], roster: &[Entry], days: u64) -> Vec<(String, u64, u6
         let model = crate::providers::canonical(entry["model"].as_str().unwrap_or("?"));
         let usage = &entry["usage"];
         let input = usage["input_tokens"].as_u64().unwrap_or(0)
-            + usage["cache_read_input_tokens"].as_u64().unwrap_or(0);
+            + usage["cache_read_input_tokens"].as_u64().unwrap_or(0)
+            + usage["cache_creation_input_tokens"].as_u64().unwrap_or(0);
         let output = usage["output_tokens"].as_u64().unwrap_or(0);
         let cost = roster.iter().find(|e| e.id == model).map_or(0.0, |p| {
             (input as f64 * p.cost_input + output as f64 * p.cost_output) / 1_000_000.0

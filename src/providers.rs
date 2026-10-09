@@ -376,6 +376,11 @@ pub fn resolve_key(reference: &str) -> anyhow::Result<String> {
 }
 
 /// The API key for a provider: config reference first, then auth.json.
+/// Claude Code's tool search tools, which only Anthropic's API understands.
+pub fn claude_only_tool(tool: &serde_json::Value) -> bool {
+    tool["defer_loading"] == true || tool["name"] == "ToolSearch"
+}
+
 /// Start of the error for a local model server that is not running; such errors are not retried.
 pub const NOT_RUNNING: &str = "No model server is running at";
 pub const NOT_RUNNING_HINT: &str = "Start it (for Ollama: ollama serve), or pick another model; byom models shows which are offline.";

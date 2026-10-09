@@ -247,6 +247,7 @@ pub fn print_logs(lines: usize) -> Result<()> {
             (Some(i), Some(o)) => format!(
                 "{}/{o}",
                 i + usage["cache_read_input_tokens"].as_u64().unwrap_or(0)
+                    + usage["cache_creation_input_tokens"].as_u64().unwrap_or(0)
             ),
             _ => "-".into(),
         };

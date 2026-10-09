@@ -123,22 +123,32 @@ pub fn prepare(
             }
         }
     }
-    let body = match upstream_model {
-        Some(model) => rewrite_model(&request.body, model),
-        None => request.body.clone(),
-    };
+    let claude = provider.id == crate::providers::CLAUDE_PROVIDER;
+    let body = rewrite_body(&request.body, upstream_model, !claude);
     Ok((url, headers, body))
 }
 
-/// Replace the request's model; the original bytes are kept when it already matches.
-fn rewrite_model(body: &Bytes, model: &str) -> Bytes {
+/// Set the provider's model name and, for other providers, drop Claude-only tools; the
+/// original bytes are kept when nothing changes.
+fn rewrite_body(body: &Bytes, model: Option<&str>, strip: bool) -> Bytes {
     let Ok(Value::Object(mut map)) = serde_json::from_slice::<Value>(body) else {
         return body.clone();
     };
-    if map.get("model").and_then(Value::as_str) == Some(model) {
+    let mut changed = false;
+    if let Some(model) = model
+        && map.get("model").and_then(Value::as_str) != Some(model)
+    {
+        map.insert("model".into(), Value::String(model.into()));
+        changed = true;
+    }
+    if strip && let Some(Value::Array(tools)) = map.get_mut("tools") {
+        let before = tools.len();
+        tools.retain(|t| !crate::providers::claude_only_tool(t));
+        changed |= tools.len() != before;
+    }
+    if !changed {
         return body.clone();
     }
-    map.insert("model".into(), Value::String(model.into()));
     Bytes::from(serde_json::to_vec(&map).unwrap_or_else(|_| body.to_vec()))
 }
 
@@ -308,6 +318,17 @@ mod tests {
             .status,
             401
         );
+    }
+
+    #[test]
+    fn claude_only_tools_are_dropped_for_other_providers() {
+        let body = Bytes::from_static(
+            br#"{"model":"kimi/k3","tools":[{"name":"Read"},{"name":"ToolSearch"},{"name":"DeferredToolPlaceholder","defer_loading":true}]}"#,
+        );
+        let out: Value = serde_json::from_slice(&rewrite_body(&body, Some("k3"), true)).unwrap();
+        assert_eq!(out["model"], "k3");
+        assert_eq!(out["tools"], serde_json::json!([{"name": "Read"}]));
+        assert_eq!(rewrite_body(&body, None, false), body);
     }
 
     #[tokio::test]
