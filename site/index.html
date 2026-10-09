@@ -7,7 +7,7 @@
 <meta name="description" content="Use your ChatGPT plan inside Claude Code, no API key. GPT joins Claude in the /model picker, along with GLM, Kimi, DeepSeek, Gemini and local models.">
 <meta name="theme-color" content="#f4f4f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111218" media="(prefers-color-scheme: dark)">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3Epath%7Bstroke:%2315161c%7D@media(prefers-color-scheme:dark)%7Bpath%7Bstroke:%23e8e9f0%7D%7D%3C/style%3E%3Cpath d='M4 19.5V11a3.5 3.5 0 0 1 7 0v8.5M11 11a3.5 3.5 0 0 1 7 0v8.5' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='11' cy='20' r='2.4' fill='%234b52b5'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3Epath%7Bstroke:%2315161c%7D@media(prefers-color-scheme:dark)%7Bpath%7Bstroke:%23e8e9f0%7D%7D%3C/style%3E%3Cpath d='M5 16.5V10a3.5 3.5 0 0 1 7 0v6.5M12 10a3.5 3.5 0 0 1 7 0v6.5' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='17' r='2.4' fill='%234b52b5'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -89,8 +89,8 @@ p { margin: 0; }
 
 /* Header */
 header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 18px; font-size: var(--fs-s); }
-.brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: var(--fs-m); text-decoration: none; letter-spacing: -.01em; padding-block: 8px; }
-.brand svg { width: 22px; height: 22px; }
+.brand { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: var(--fs-m); text-decoration: none; letter-spacing: -.01em; padding-block: 8px; }
+.brand svg { width: 26px; height: 26px; margin-left: -3px; transform: translateY(-1px); }
 nav.links { display: flex; gap: 24px; color: var(--muted); }
 nav.links a { text-decoration: none; padding-block: 10px; }
 nav.links a:hover { color: var(--fg); }
@@ -266,8 +266,8 @@ footer nav a { padding-block: 10px; }
   <header class="top">
     <a class="brand" href="#" aria-label="byom home">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M4 19.5V11a3.5 3.5 0 0 1 7 0v8.5M11 11a3.5 3.5 0 0 1 7 0v8.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-        <circle cx="4" cy="20" r="1.8" fill="currentColor"/><circle cx="11" cy="20" r="1.8" fill="var(--accent)"/><circle cx="18" cy="20" r="1.8" fill="currentColor"/>
+        <path d="M5 16.5V10a3.5 3.5 0 0 1 7 0v6.5M12 10a3.5 3.5 0 0 1 7 0v6.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="5" cy="17" r="1.8" fill="currentColor"/><circle cx="12" cy="17" r="1.8" fill="var(--accent)"/><circle cx="19" cy="17" r="1.8" fill="currentColor"/>
       </svg>
       byom
     </a>
