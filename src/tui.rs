@@ -1186,8 +1186,7 @@ fn save(app: &mut App, path: &std::path::Path) {
             let transport_changed = app.config.transport != app.saved.transport;
             app.mark_saved();
             app.status = if transport_changed {
-                "Saved. Transport applies after the bridge restarts: byom stop, then byom run."
-                    .into()
+                "Saved. Transport applies after the bridge restarts: byom restart.".into()
             } else {
                 "Saved. The next byom run uses these settings.".into()
             };

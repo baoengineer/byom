@@ -633,7 +633,19 @@ pub async fn status() -> Result<()> {
     );
 }
 
-pub async fn stop() -> Result<()> {
+/// Requests the bridge served in the last ten minutes; open sessions depend on it.
+fn recent_requests() -> usize {
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs().saturating_sub(600))
+        .unwrap_or(0);
+    crate::roster::log_entries()
+        .iter()
+        .filter(|e| e["at"].as_u64().is_some_and(|at| at >= since))
+        .count()
+}
+
+pub async fn stop(force: bool) -> Result<()> {
     let client = client()?;
     let Some(key) = key().await? else {
         println!("Bridge is not running");
@@ -643,10 +655,44 @@ pub async fn stop() -> Result<()> {
         println!("Bridge is not running");
         return Ok(());
     }
+    let recent = recent_requests();
+    if recent > 0 && !force {
+        bail!(
+            "the bridge served {recent} requests in the last 10 minutes; open byom sessions would get \"connection refused\" until it starts again. Use `byom restart` to swap it now, or `byom stop --force`"
+        );
+    }
     if !request_shutdown(&client, &key).await {
         bail!("the running bridge does not accept shutdown requests; stop its process directly");
     }
     println!("Bridge stopping");
+    Ok(())
+}
+
+/// Replace the running bridge with this version's; open sessions reconnect on their next request.
+pub async fn restart() -> Result<()> {
+    let client = client()?;
+    if let Some(key) = key().await?
+        && ready(&client, &key).await.is_some()
+    {
+        if !request_shutdown(&client, &key).await {
+            bail!(
+                "the running bridge does not accept shutdown requests; stop its process directly"
+            );
+        }
+        let deadline = Instant::now() + START_TIMEOUT;
+        while !port_free().await {
+            if Instant::now() >= deadline {
+                bail!("the previous bridge did not stop within 5 seconds");
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    }
+    ensure_bridge(&client).await?;
+    println!(
+        "Bridge {} running at http://127.0.0.1:{}",
+        env!("CARGO_PKG_VERSION"),
+        port()
+    );
     Ok(())
 }
 

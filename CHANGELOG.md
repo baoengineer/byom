@@ -2,6 +2,7 @@
 
 ## 0.4.1
 
+- `byom stop` refuses while sessions are using the bridge (requests in the last ten minutes) unless `--force`, since stopping it leaves open sessions with "connection refused". `byom restart` replaces the bridge in place, for upgrades.
 - Claude Code's flags pass straight through: `byom --resume <id>`, `byom -c`, `byom -p "..."`, and `byom run <model> --continue` without `--`.
 - A local model server that isn't running (Ollama, LM Studio) shows as `offline` in `byom models`, is left out of the session, and fails at once with a clear error that Claude Code does not retry.
 - byom's per-model agents get Claude Code's built-in tools only, without MCP tools, which keeps each request to another provider much smaller.

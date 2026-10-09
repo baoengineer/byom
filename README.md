@@ -113,7 +113,7 @@ byom doctor                           check Claude Code, sign-ins, the bridge an
 byom logs [-n N]                      recent requests: model, route, latency, tokens
 ```
 
-`byom --help` lists the rest (`logout`, `auth`, `status`, `stop`, `--skill`). Settings and credentials are described in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+`byom --help` lists the rest (`logout`, `auth`, `status`, `restart`, `stop`, `--skill`). Settings and credentials are described in [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
 
 ## FAQ
 
@@ -135,12 +135,13 @@ Each provider's plan limits apply. ChatGPT also caps each connected app: if requ
 - **"Not signed in" or no models.** `byom login`, then `byom models --refresh`.
 - **No Claude in `/model`.** Claude models are opt-in; see [Claude models](#claude-models).
 - **Ollama answers off-topic.** Claude Code's prompt is large; raise Ollama's context with `OLLAMA_CONTEXT_LENGTH=32768 ollama serve`, and use a model that supports tools.
-- **Requests fail after an upgrade.** `byom run` replaces an older bridge automatically; otherwise `byom stop` and retry.
+- **Requests fail after an upgrade.** `byom restart` swaps in the new bridge; open sessions reconnect on their next request.
+- **"Connection refused" in Claude Code.** The bridge isn't running; `byom restart` starts it, and the session continues.
 
 ## Uninstall
 
 ```sh
-byom stop
+byom stop --force
 rm "$(command -v byom)"      # or: cargo uninstall byom
 rm -rf ~/.byom
 ```

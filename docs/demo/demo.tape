@@ -56,6 +56,6 @@ Ctrl+C
 Sleep 300ms
 Ctrl+C
 Sleep 1s
-Type "byom stop; kill %1"
+Type "byom stop --force; kill %1"
 Enter
 Sleep 1s

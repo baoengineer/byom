@@ -61,8 +61,14 @@ enum Command {
     Doctor,
     /// Report whether the bridge is running.
     Status,
-    /// Stop the running bridge.
-    Stop,
+    /// Stop the running bridge; refuses while sessions are using it, unless --force.
+    Stop {
+        /// Stop even though open sessions would lose their connection.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Replace the running bridge with this version's, as after an upgrade.
+    Restart,
     /// Show recent requests from the bridge log.
     Logs {
         /// Number of requests to show.
@@ -154,7 +160,8 @@ async fn main() -> Result<()> {
         },
         Command::Doctor => byom::doctor::run().await,
         Command::Status => byom::launch::status().await,
-        Command::Stop => byom::launch::stop().await,
+        Command::Stop { force } => byom::launch::stop(force).await,
+        Command::Restart => byom::launch::restart().await,
         Command::Logs { lines } => byom::roster::print_logs(lines),
         Command::Bridge { port } => byom::bridge::serve(port).await,
     }
