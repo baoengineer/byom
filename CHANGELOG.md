@@ -2,6 +2,7 @@
 
 ## 0.4.1
 
+- When OpenAI closes the WebSocket before a response has produced anything, byom reconnects once and resends the turn instead of returning an API error to Claude Code.
 - With Claude models available, a non-Claude main model no longer pins the session's compaction window to its own size, which made Claude models compact over and over after switching in `/model`.
 
 ## 0.4.0

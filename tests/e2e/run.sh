@@ -34,7 +34,7 @@ cat > "$home/cache/models.json" <<JSON
  {"slug":"mock-luna","display_name":"Mock Luna","description":"","context_window":272000,"effort_levels":["low"],"default_effort":"low","listed":true}]
 JSON
 
-MOCK_SUBAGENT=byom:openai-mock-main MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
+MOCK_DROP_ONCE=1 MOCK_SUBAGENT=byom:openai-mock-main MOCK_LOG=$work/mock.log MOCK_ANTHROPIC_LOG=$work/anthropic.log "$mock" "$mock_port" "$anthropic_port" > "$work/mock.out" 2>&1 &
 mock_pid=$!
 sleep 0.5
 
@@ -66,6 +66,7 @@ final = next((e for e in events if e.get("type") == "result"), {})
 mock = [json.loads(l) for l in open(f"{work}/mock.log")]
 bridge = [json.loads(l) for l in open(f"{work}/home/logs/bridge.log")]
 checks = {
+    "dropped stream reconnected": any(b.get("retried") and b.get("outcome") == "ok" for b in bridge),
     "thinking shown": any(b["type"] == "thinking" and "Planning" in b.get("thinking", "") for b in blocks),
     "tool ran": any("mock-ok" in json.dumps(e) for e in results),
     "final answer": final.get("result") == "Mock done." and not final.get("is_error"),

@@ -14,6 +14,9 @@
 //! SUBAGENTTEST prompt, one Agent call to the subagent named by `MOCK_SUBAGENT`, default `probe`), `count_tokens` returns a
 //! count, and any other path returns `{}`. Each request is logged to `MOCK_ANTHROPIC_LOG`.
 //!
+//! `MOCK_DROP_ONCE` closes the WebSocket after the first event of the first response, to
+//! exercise the bridge's reconnect.
+//!
 //! Usage: cargo run --example mock_openai -- <port> [anthropic-port]
 use std::collections::HashSet;
 use std::io::Write;
@@ -53,6 +56,14 @@ async fn main() {
                     continue;
                 };
                 let body: Value = serde_json::from_str(&text).unwrap_or_default();
+                // MOCK_DROP_ONCE: answer the first response with one event, then close.
+                if std::env::var_os("MOCK_DROP_ONCE").is_some()
+                    && issued.lock().unwrap().insert("drop")
+                {
+                    let created = json!({"type": "response.created", "response": {"id": "resp_dropped", "status": "in_progress"}});
+                    let _ = socket.send(Message::text(created.to_string())).await;
+                    return;
+                }
                 for event in respond(&body, conn, &issued, &log) {
                     if socket.send(Message::text(event.to_string())).await.is_err() {
                         return;

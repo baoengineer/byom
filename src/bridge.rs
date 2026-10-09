@@ -821,6 +821,7 @@ async fn dispatch(
         thinking: translated.thinking,
     };
     let mut translator = Translator::new(&translated.model, translated.thinking);
+    let again = turn.clone();
     let mut events = match state.upstream.start(turn).await {
         Ok(events) => events,
         Err(e) => {
@@ -830,9 +831,24 @@ async fn dispatch(
     };
     // Hold headers until content arrives so early failures keep their HTTP status.
     let mut frames = VecDeque::new();
+    let mut reconnected = false;
     while !translator.has_content() && !translator.finished() {
         match pull(&mut events, &mut translator).await {
             Ok(out) => frames.extend(out),
+            // Nothing has reached Claude Code yet, so a dropped stream starts over once.
+            Err(e) if !reconnected && e.message == crate::upstream::STREAM_LOST => {
+                reconnected = true;
+                events = match state.upstream.start(again.clone()).await {
+                    Ok(events) => events,
+                    Err(e) => {
+                        state.write_log(&log, None, &e.message, &Value::Null);
+                        return error(e.status, e.kind, &e.message);
+                    }
+                };
+                events.route.retried = true;
+                translator = Translator::new(&translated.model, translated.thinking);
+                frames.clear();
+            }
             Err(e) => {
                 state.write_log(&log, Some(&events.route), &e.message, &Value::Null);
                 return error(e.status, e.kind, &e.message);
@@ -906,7 +922,7 @@ async fn pull(
         None => Err(ProviderError::new(
             502,
             "api_error",
-            "OpenAI stream ended before the response completed",
+            crate::upstream::STREAM_LOST,
         )),
     }
 }

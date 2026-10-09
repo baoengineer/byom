@@ -34,6 +34,10 @@ pub enum Transport {
     Http,
 }
 
+/// The error for a stream that ended before the response completed.
+pub const STREAM_LOST: &str = "OpenAI stream ended before the response completed";
+
+#[derive(Clone)]
 pub struct Turn {
     pub session: Option<String>,
     /// Responses body without `input`.
@@ -602,13 +606,7 @@ impl Events {
     }
 
     async fn read(&mut self) -> Option<Result<Value, ProviderError>> {
-        let lost = || {
-            ProviderError::new(
-                502,
-                "api_error",
-                "OpenAI stream ended before the response completed",
-            )
-        };
+        let lost = || ProviderError::new(502, "api_error", STREAM_LOST);
         match &mut self.source {
             Source::Ws { conn, .. } => {
                 let socket = &mut conn.as_mut()?.socket;
