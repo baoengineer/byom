@@ -116,6 +116,8 @@ A panel costs several model runs plus the judge's, and takes minutes. Inside a s
 
 ### Panels inside Claude Code
 
+![Claude asks a panel of K3, GLM-5.3 and MiniMax-M3; the pane tracks each panelist, then the verdict comes back as a message](docs/demo/panel.gif)
+
 Each `byoclaude` session loads a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview) (Claude Code 2.1.287 or later) that makes panels part of the session:
 
 - **A panel tool for Claude** (`mcp__byoclaude__panel`). In an interactive session it returns at once, so Claude keeps working; when the judge finishes, the verdict arrives as a new message.
@@ -196,7 +198,7 @@ Each provider's own plan limits apply. ChatGPT also caps each connected app sepa
 ```sh
 cargo test
 tests/e2e/run.sh          # real Claude Code against local mocks of OpenAI and Anthropic; no plan usage
-vhs docs/demo/demo.tape   # re-record the demo GIF
+vhs docs/demo/demo.tape   # re-record the demo GIF (docs/demo/panel.tape: the panel GIF)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROVIDER.md](docs/PROVIDER.md), [docs/ROADMAP.md](docs/ROADMAP.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
