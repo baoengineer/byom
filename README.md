@@ -8,7 +8,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**Use your ChatGPT plan inside Claude Code.** Sign in with ChatGPT, no API key, and GPT shows up in [Claude Code](https://claude.com/claude-code)'s `/model` picker next to Claude. GLM, Kimi, MiniMax, DeepSeek, Gemini, Groq, OpenRouter, and local models through Ollama or LM Studio work the same way. byom stands for bring your own model.
+**Run Claude Code on GPT, GLM, Kimi or a local model.** Pick any of them in [Claude Code](https://claude.com/claude-code)'s `/model` picker, next to Claude, and it works with Claude Code's own tools, hooks, MCP servers and skills. GPT comes from your ChatGPT plan through OpenAI's official sign-in, with no API key. MiniMax, DeepSeek, Gemini, Groq, OpenRouter, and local models through Ollama or LM Studio work the same way. byom stands for bring your own model.
 
 ![byom config, then Claude Code on GPT-5.6-Sol, then /model with Claude and GPT side by side](docs/demo/demo.gif)
 
@@ -136,6 +136,8 @@ byom logs [-n N]                      recent requests: model, route, latency, to
 **Does it change Claude Code?** No. byom starts the official `claude` with a base URL, a settings file and a session plugin. Run `claude` directly and nothing from byom is there.
 
 **What does it store?** Settings, credentials you add, a local bridge key and request metadata, all in `~/.byom`. See [SECURITY.md](SECURITY.md).
+
+**How is it different from OpenAI's Codex plugin?** The [Codex plugin](https://github.com/openai/codex-plugin-cc) lets Claude hand reviews and tasks to the Codex agent, while Claude stays the main model. With byom, GPT is a model Claude Code itself runs on: pick it in `/model` and it uses Claude Code's own tools, hooks and skills, and Claude can also hand it work through its byom subagent. byom also covers GLM, Kimi, DeepSeek, Gemini, OpenRouter and local models, and needs no Node.js or Codex install. The two work side by side.
 
 **How is it different from claude-code-router?** Both route Claude Code's requests to other models. byom's focus is different in four ways: it signs in to your ChatGPT plan through OpenAI's official open-source app flow, so no API key; Claude stays in the same `/model` list as the other models; Claude gets one subagent per model and can run model teams, so it can hand work to other models itself; and it ships as one Rust binary that finds your models without a config file.
 

@@ -8,7 +8,7 @@
 
 [English](README.md) | 简体中文
 
-**在 Claude Code 里用你的 ChatGPT 套餐，无需 API key。** 用 ChatGPT 账号登录即可，GPT 会和 Claude 一起出现在 [Claude Code](https://claude.com/claude-code) 的 `/model` 选择器里。GLM、Kimi、MiniMax、DeepSeek、Gemini、Groq、OpenRouter，以及通过 Ollama 或 LM Studio 运行的本地模型，用法完全相同。byom 是 bring your own model（自带模型）的缩写。
+**让 Claude Code 跑在 GPT、GLM、Kimi 或本地模型上。** 在 [Claude Code](https://claude.com/claude-code) 的 `/model` 选择器里直接选，和 Claude 并列，它直接使用 Claude Code 自带的工具、hooks、MCP 服务器和 skills。GPT 走你的 ChatGPT 套餐，用 OpenAI 官方登录，无需 API key。MiniMax、DeepSeek、Gemini、Groq、OpenRouter，以及通过 Ollama 或 LM Studio 运行的本地模型，用法完全相同。byom 是 bring your own model（自带模型）的缩写。
 
 ![byom config, then Claude Code on GPT-5.6-Sol, then /model with Claude and GPT side by side](docs/demo/demo.gif)
 
@@ -138,6 +138,8 @@ byom logs [-n N]                      recent requests: model, route, latency, to
 **会改动 Claude Code 吗？** 不会。byom 只是带上一个 base URL、一个设置文件和一个会话插件来启动官方的 `claude`。直接运行 `claude` 时，byom 的东西都不会出现。
 
 **会存储哪些数据？** 设置、你添加的凭据、一个本地 bridge key 以及请求元数据，全部放在 `~/.byom`。详见 [SECURITY.md](SECURITY.md)。
+
+**和 OpenAI 的 Codex 插件有什么区别？** [Codex 插件](https://github.com/openai/codex-plugin-cc) 让 Claude 把 review 和任务交给 Codex agent，主模型仍然是 Claude。用 byom 时，GPT 是 Claude Code 本身运行的模型：在 `/model` 里选中它，它就直接使用 Claude Code 自己的工具、hooks 和 skills；Claude 也可以通过 byom 子代理把工作交给它。byom 还支持 GLM、Kimi、DeepSeek、Gemini、OpenRouter 和本地模型，不需要安装 Node.js 或 Codex。两者可以同时使用。
 
 **和 claude-code-router 有什么区别？** 两者都能把 Claude Code 的请求转给其他模型。byom 的侧重点有四处不同：它通过 OpenAI 官方的开源应用登录流程接入你的 ChatGPT 套餐，不需要 API key；Claude 和其他模型在同一个 `/model` 列表里；Claude 拥有每个模型对应的 subagent，还能组建多模型团队，可以自己把工作交给其他模型；它是单个 Rust 二进制文件，不需要配置文件就能找到你的模型。
 
