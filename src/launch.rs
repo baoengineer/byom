@@ -523,10 +523,21 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
     if !crate::catalog::roster_exists() {
         crate::catalog::refresh(&config).await;
     }
+    // Local servers that are not running would only fail every request, so they are left out.
+    let providers = crate::providers::all(&config);
+    let offline: Vec<&str> = providers
+        .iter()
+        .filter(|p| p.auth == crate::providers::Auth::None && !crate::providers::reachable(p))
+        .map(|p| p.id.as_str())
+        .collect();
+    let roster: Vec<crate::catalog::Entry> = crate::catalog::roster_cached()
+        .into_iter()
+        .filter(|e| !offline.contains(&e.provider.as_str()))
+        .collect();
     let plan = plan(
         &config,
         &models,
-        &crate::catalog::roster_cached(),
+        &roster,
         model,
         relay || crate::providers::claude_key(&config),
     )?;

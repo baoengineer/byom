@@ -376,6 +376,39 @@ pub fn resolve_key(reference: &str) -> anyhow::Result<String> {
 }
 
 /// The API key for a provider: config reference first, then auth.json.
+/// Start of the error for a local model server that is not running; such errors are not retried.
+pub const NOT_RUNNING: &str = "No model server is running at";
+pub const NOT_RUNNING_HINT: &str = "Start it (for Ollama: ollama serve), or pick another model; byom models shows which are offline.";
+
+pub fn is_local_host(host: &str) -> bool {
+    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
+}
+
+/// Whether a local provider's server accepts connections; providers on other hosts count as up.
+pub fn reachable(provider: &Provider) -> bool {
+    let Ok(url) = reqwest::Url::parse(&provider.base_url) else {
+        return true;
+    };
+    let host = url.host_str().unwrap_or_default().to_owned();
+    if !is_local_host(&host) {
+        return true;
+    }
+    let port = url.port_or_known_default().unwrap_or(80);
+    let ip = if host.contains(':') {
+        "::1"
+    } else {
+        "127.0.0.1"
+    };
+    let Ok(ip) = ip.parse::<std::net::IpAddr>() else {
+        return true;
+    };
+    std::net::TcpStream::connect_timeout(
+        &std::net::SocketAddr::new(ip, port),
+        std::time::Duration::from_millis(300),
+    )
+    .is_ok()
+}
+
 /// Whether an Anthropic API key is saved or configured, so Claude models work without
 /// Claude Code's own sign-in.
 pub fn claude_key(config: &Config) -> bool {

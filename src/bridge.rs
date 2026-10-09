@@ -158,6 +158,7 @@ fn authenticated(headers: &HeaderMap, key: &str) -> bool {
 fn error(status: u16, kind: &str, message: &str) -> Response {
     // Plan limits and rejected requests do not clear on retry.
     let retry = !(kind == "rate_limit_error" && message.contains("plan limit"))
+        && !message.starts_with(crate::providers::NOT_RUNNING)
         && matches!(status, 408 | 409 | 429 | 500..);
     (
         StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
@@ -519,6 +520,17 @@ impl Bridge {
         }
         let response = match request.send().await {
             Ok(response) => response,
+            Err(e) if e.is_connect() && !crate::providers::reachable(provider) => {
+                let message = format!(
+                    "{} {} for {}. {}",
+                    crate::providers::NOT_RUNNING,
+                    provider.base_url,
+                    provider.name,
+                    crate::providers::NOT_RUNNING_HINT
+                );
+                self.write_log(&log, Some(&route), &message, &Value::Null);
+                return error(503, "api_error", &message);
+            }
             Err(e) => {
                 let message = format!(
                     "Could not reach {}: {}",

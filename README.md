@@ -89,7 +89,7 @@ Each `byom` session loads a small plugin, and nothing is written to `~/.claude`:
 
 - A **byom skill** tells Claude when another model helps (second opinions, cheap bulk work, long inputs) and how to delegate. Claude loads the full guide with `byom --skill`.
 - **One subagent per model**, named like `byom:openai-gpt-5-6-sol`. Claude's Agent tool can only name Claude models directly, so these agents are how subagents and workflows run on other models.
-- `byom models --json` gives Claude the live roster: each model's agent, context window, effort levels, price and status (`ready`, `capped`, `no-key`, `signed-out`).
+- `byom models --json` gives Claude the live roster: each model's agent, context window, effort levels, price and status (`ready`, `capped`, `no-key`, `signed-out`, `offline`). Local servers that aren't running are left out of the session.
 
 ## A team of models
 

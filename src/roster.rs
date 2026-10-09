@@ -84,7 +84,8 @@ fn provider_ready(
             "ready"
         }
         Auth::ApiKey => "no-key",
-        Auth::None => "ready",
+        Auth::None if crate::providers::reachable(provider) => "ready",
+        Auth::None => "offline",
     }
 }
 

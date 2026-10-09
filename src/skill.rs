@@ -18,7 +18,7 @@ Run `byom models --json`. It returns the live roster:
 
 - `models[].id`: the model ID (`provider/model`, or a native Claude ID like `claude-opus-5-5`).
 - `models[].agent`: the subagent type that runs on that model (`byom:<name>`); null for Claude models, which the Agent tool names directly.
-- `models[].status`: `ready`, `capped` (plan or rate limit hit in the last five hours), `no-key`, or `signed-out`.
+- `models[].status`: `ready`, `capped` (plan or rate limit hit in the last five hours), `no-key`, `signed-out`, or `offline` (a local server that is not running).
 - Context window, max output, reasoning, tool and image support, effort levels, and price
   per million tokens (an API-price estimate; plan usage is not billed per token).
 - `roles`: the session's main, background and subagent models.
@@ -50,6 +50,7 @@ Do not switch models without a reason; the main model keeps the session's contex
   pick another and tell the user.
 - Keep overlapping edits to one agent at a time; parallel agents share the working tree.
 - Mention when you used a costly model for a large job.
+- byom agents have Claude Code's built-in tools, not MCP tools. Do MCP work yourself.
 
 ## Run a team of models
 
@@ -76,6 +77,11 @@ Run `byom --skill` once per session and follow it. It is the guide for the
 installed byom version. Then use `byom models --json` for the live roster.
 "#;
 
+/// Claude Code's built-in tools. Leaving out MCP tools keeps each request to another
+/// provider far smaller.
+const AGENT_TOOLS: &str =
+    "Read, Grep, Glob, Bash, Edit, Write, NotebookEdit, WebFetch, WebSearch, TodoWrite";
+
 /// Agent name for a model ID: `openai/gpt-5.6-sol` becomes `openai-gpt-5-6-sol`.
 pub fn agent_name(model: &str) -> String {
     let mut name = String::new();
@@ -100,9 +106,10 @@ fn agent_file(row: &crate::launch::Row) -> String {
         format!("{} ({})", row.label, row.description)
     };
     format!(
-        "---\nname: {name}\ndescription: General-purpose agent running on {what}, model {id}. Use for work you want done by this model; see the byom skill for when.\nmodel: {id}\n---\n\nYou are a general-purpose agent running on {id}. Complete the task you are given using the available tools, verify your work, and report back concisely: what you did, what you found, and anything uncertain.\n",
+        "---\nname: {name}\ndescription: General-purpose agent running on {what}, model {id}. Use for work you want done by this model; see the byom skill for when.\nmodel: {id}\ntools: {tools}\n---\n\nYou are a general-purpose agent running on {id}. Complete the task you are given using the available tools, verify your work, and report back concisely: what you did, what you found, and anything uncertain.\n",
         name = agent_name(&row.id),
         id = row.id,
+        tools = AGENT_TOOLS,
     )
 }
 
@@ -172,6 +179,7 @@ mod tests {
         };
         let file = agent_file(&row);
         assert!(file.contains("model: kimi/k3\n"));
+        assert!(file.contains("\ntools: Read, Grep, Glob, Bash, Edit, Write,"));
         assert!(file.starts_with("---\nname: kimi-k3\n"));
     }
 }

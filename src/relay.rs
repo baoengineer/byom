@@ -167,23 +167,42 @@ pub async fn send(
         .body(body)
         .send()
         .await
-        .map_err(|e| Refusal {
-            status: if e.is_timeout() { 504 } else { 502 },
-            kind: "api_error",
-            message: format!(
-                "Could not reach {}: {}",
-                reqwest::Url::parse(url)
-                    .ok()
-                    .and_then(|u| u.host_str().map(str::to_owned))
-                    .unwrap_or_default(),
-                if e.is_connect() {
-                    "connection failed"
-                } else if e.is_timeout() {
-                    "timed out"
-                } else {
-                    "request failed"
-                }
-            ),
+        .map_err(|e| {
+            let parsed = reqwest::Url::parse(url).ok();
+            let host = parsed
+                .as_ref()
+                .and_then(|u| u.host_str().map(str::to_owned))
+                .unwrap_or_default();
+            if e.is_connect() && crate::providers::is_local_host(&host) {
+                let port = parsed
+                    .and_then(|u| u.port())
+                    .map(|p| format!(":{p}"))
+                    .unwrap_or_default();
+                return Refusal {
+                    status: 503,
+                    kind: "api_error",
+                    message: format!(
+                        "{} {host}{port}. {}",
+                        crate::providers::NOT_RUNNING,
+                        crate::providers::NOT_RUNNING_HINT
+                    ),
+                };
+            }
+            Refusal {
+                status: if e.is_timeout() { 504 } else { 502 },
+                kind: "api_error",
+                message: format!(
+                    "Could not reach {}: {}",
+                    host,
+                    if e.is_connect() {
+                        "connection failed"
+                    } else if e.is_timeout() {
+                        "timed out"
+                    } else {
+                        "request failed"
+                    }
+                ),
+            }
         })?;
     let mut builder = Response::builder().status(
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY),
@@ -289,6 +308,29 @@ mod tests {
             .status,
             401
         );
+    }
+
+    #[tokio::test]
+    async fn local_server_down_is_not_running() {
+        let port = std::net::TcpListener::bind(("127.0.0.1", 0))
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let client = reqwest::Client::new();
+        let refusal = send(
+            &client,
+            Method::POST,
+            &format!("http://127.0.0.1:{port}/v1/messages"),
+            HeaderMap::new(),
+            Bytes::new(),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(refusal.status, 503);
+        assert!(refusal.message.starts_with(crate::providers::NOT_RUNNING));
+        assert!(refusal.message.contains(&format!("127.0.0.1:{port}")));
     }
 
     #[test]
