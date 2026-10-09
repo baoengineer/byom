@@ -29,6 +29,8 @@ pub struct Config {
     pub transport: String,
     /// Claude model whose client-side handling Claude Code applies to other models.
     pub behaves_as: String,
+    /// Turn on Claude Code's agent teams, so teammates can run on any model.
+    pub teams: bool,
     /// Provider settings and user-defined providers, keyed by provider ID.
     pub providers: BTreeMap<String, ProviderConfig>,
     /// Models to try, in order, when a model fails before producing output.
@@ -73,6 +75,7 @@ impl Default for Config {
             context_tokens: 0,
             transport: "auto".to_owned(),
             behaves_as: "claude-opus-5-5".to_owned(),
+            teams: false,
             providers: BTreeMap::new(),
             fallbacks: BTreeMap::new(),
             legacy_provider: None,
@@ -298,6 +301,7 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.model, "");
         assert!(!config.relay);
+        assert!(!config.teams);
         assert_eq!(config.upstream_base_url, "https://api.openai.com/v1");
         assert_eq!(config.transport, "auto");
         config.validate().unwrap();

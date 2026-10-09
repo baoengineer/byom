@@ -50,6 +50,21 @@ Do not switch models without a reason; the main model keeps the session's contex
   pick another and tell the user.
 - Keep overlapping edits to one agent at a time; parallel agents share the working tree.
 - Mention when you used a costly model for a large job.
+
+## Run a team of models
+
+When the user turned on teams (`byom config set teams true`), Claude Code's agent teams
+are on, and a teammate runs on whatever model its agent type names. Spawn a teammate with
+a `name` and `subagent_type` set to a model's `agent` value, such as
+`byom:openai-gpt-5-6-sol`.
+
+- Give each teammate a role that fits its model: a strong reasoning model to review or
+  plan, a fast or cheap one for bulk reading, tests or log scans, a long-context one for
+  large inputs. `byom models --json` shows price, context and status.
+- Each teammate owns different files; two teammates editing one file overwrite each other.
+- Have teammates message each other to challenge findings, not only report to you.
+- Three or four teammates is usually enough; every teammate is a full session and costs
+  its own tokens on its provider.
 "#;
 
 const SKILL: &str = r#"---

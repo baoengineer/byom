@@ -1,14 +1,16 @@
+<p><picture><source media="(prefers-color-scheme: dark)" srcset="docs/brand/mark-dark.svg"><img src="docs/brand/mark-light.svg" width="56" height="56" alt=""></picture></p>
+
 # byom
 
 [![CI](https://github.com/baoengineer/byom/actions/workflows/ci.yml/badge.svg)](https://github.com/baoengineer/byom/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/baoengineer/byom)](https://github.com/baoengineer/byom/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-**Bring your own model to Claude Code.** Keep [Claude Code](https://claude.com/claude-code) as your harness and use every model you can sign in to, in the same session: GPT on your ChatGPT plan, GLM, Kimi, MiniMax, DeepSeek, Gemini, Groq, OpenRouter, and local models through Ollama or LM Studio. Claude stays available too.
+**Bring your own model to Claude Code.** Keep using [Claude Code](https://claude.com/claude-code), and use every model you can sign in to in the same session: GPT on your ChatGPT plan, GLM, Kimi, MiniMax, DeepSeek, Gemini, Groq, OpenRouter, and local models through Ollama or LM Studio. Claude stays available too.
 
 ![byom config, then Claude Code on GPT-5.6-Sol, then /model with Claude and GPT side by side](docs/demo/demo.gif)
 
-Claude Code stays unmodified: its tools, subagents, hooks, MCP servers, skills, plan mode and session resume work as usual. byom runs a small local router that sends each request to the right provider by model ID:
+Claude Code stays unmodified. Its tools, subagents, hooks, MCP servers, skills, plan mode and session resume work as usual. byom runs a small local router that sends each request to the right provider by model ID:
 
 ```text
 claude (official)
@@ -88,6 +90,16 @@ Each `byom` session loads a small plugin, and nothing is written to `~/.claude`:
 - A **byom skill** tells Claude when another model helps (second opinions, cheap bulk work, long inputs) and how to delegate. Claude loads the full guide with `byom --skill`.
 - **One subagent per model**, named like `byom:openai-gpt-5-6-sol`. Claude's Agent tool can only name Claude models directly, so these agents are how subagents and workflows run on other models.
 - `byom models --json` gives Claude the live roster: each model's agent, context window, effort levels, price and status (`ready`, `capped`, `no-key`, `signed-out`).
+
+## A team of models
+
+Claude Code's [agent teams](https://code.claude.com/docs/en/agent-teams) let a lead session spawn teammates that share a task list and message each other. With byom, each teammate can run on a different provider:
+
+```sh
+byom config set teams true
+```
+
+Then ask for a team, for example: "spawn a reviewer on GPT-5.6-Sol, an implementer on GLM-5.3 and a test writer on Kimi K3". Claude picks each teammate's model from its byom agent (`byom:openai-gpt-5-6-sol`, …) and coordinates the work. Teammates run inside the lead's terminal, so they share its connection to byom. Agent teams are experimental in Claude Code and every teammate uses its own tokens.
 
 ## Commands
 

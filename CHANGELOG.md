@@ -9,6 +9,7 @@ Renamed to byom, and the Claude relay is opt-in.
 - Security: API keys are re-read on every request, so `logout` and new keys apply to a running bridge; requests carrying keys do not follow redirects; providers other than the Claude relay receive only an allowlist of headers; pasted keys are stored as typed and never run.
 - Chat Completions providers: a stream cut off before finishing is an error instead of a finished turn, and parallel tool calls no longer merge.
 - Non-object JSON bodies get a 400 instead of failing the request handler.
+- Teams: `byom config set teams true` turns on Claude Code's agent teams, and each teammate can run on a different provider through its byom agent. byom sessions keep teammates in-process so they reach the bridge.
 - 0.3.0 was tagged briefly and withdrawn; its panels feature was removed before release.
 
 ## 0.2.0

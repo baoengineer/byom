@@ -185,7 +185,9 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
         assert_eq!(lines.next(), Some("arg=<--settings>"), "{stdout}");
         let settings = lines.next().unwrap();
         assert!(
-            settings.contains("modelPicker") && settings.contains(model),
+            settings.contains("modelPicker")
+                && settings.contains(model)
+                && settings.contains(r#""teammateMode":"in-process""#),
             "{settings}"
         );
         assert!(

@@ -31,6 +31,7 @@ The relay is opt-in (`relay`, default `false`). When it is on and Claude Code is
 - Passes `--settings` with a `modelPicker` whose rows are every usable non-Claude model, each with `behavesAs` (default `claude-opus-5-5`) so Claude Code applies effort levels and thinking and accepts the ID. With the relay, rows are added to Claude Code's built-in list; without it they replace it.
 - Generates the session plugin (`skill.rs`) under `~/.byom/plugin` and passes `--plugin-dir`.
 - Disables tool search, since non-Claude models never receive deferred tools.
+- Sets `teammateMode` to `in-process`: teammates in their own panes would not inherit the bridge key header. With `teams`, sets `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`; each teammate takes its model from its byom agent definition.
 
 ## Claude-facing layer (`skill.rs`, `roster.rs`)
 

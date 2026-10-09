@@ -7,6 +7,7 @@
 <meta name="description" content="Every model you sign in to, inside Claude Code: GPT on your ChatGPT plan, GLM, Kimi, DeepSeek, Gemini and local models in the same /model picker as Claude.">
 <meta name="theme-color" content="#f4f4f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111218" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cstyle%3Epath%7Bstroke:%2315161c%7D@media(prefers-color-scheme:dark)%7Bpath%7Bstroke:%23e8e9f0%7D%7D%3C/style%3E%3Cpath d='M4 19.5V11a3.5 3.5 0 0 1 7 0v8.5M11 11a3.5 3.5 0 0 1 7 0v8.5' fill='none' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='11' cy='20' r='2.4' fill='%234b52b5'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -52,7 +53,7 @@
     --bg: #111218; --raise: #191a21; --fg: #e8e9f0; --muted: #a4a7b6; --faint: #8b8fa1; --line: #2b2d38;
     --accent: #a9aef0; --accent-soft: #24263b; --on-accent: #111218;
     --ring: rgba(255, 255, 255, .09); --shadow: 0 24px 60px -24px rgba(0, 0, 0, .8);
-    color-scheme: dark;
+      color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
@@ -175,16 +176,40 @@ section { padding-block: 96px; }
 
 .flow-head { display: grid; gap: 12px; max-width: 34rem; margin-bottom: 40px; }
 .flow-head p { color: var(--muted); }
-.flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; }
-.flow li { position: relative; display: grid; gap: 6px; align-content: start; padding-right: 28px; }
-.flow .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft); margin: 2px 0 14px 2px; }
-.flow li:not(:last-child)::after {
-  content: ""; position: absolute; left: 26px; right: 10px; top: 7px; height: 2px; background: var(--line);
-}
-.flow li:not(:last-child) .bar { position: absolute; left: 26px; right: 10px; top: 7px; height: 2px; background: var(--accent); transform-origin: left; z-index: 1; }
-.flow b { font-weight: 600; font-size: var(--fs-l); letter-spacing: -.015em; }
-.flow span { color: var(--muted); font-size: var(--fs-s); }
-.flow code { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.wall { display: grid; gap: 28px; padding-block: 64px 32px; }
+.wall { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; }
+.wall-head { display: grid; gap: 12px; }
+.wall-head p { color: var(--muted); }
+.roster pre { margin: 0; font-size: 12.5px; line-height: 1.75; }
+.roster .row { display: grid; margin-top: 0; grid-template-columns: minmax(0, 1fr) 7ch 10ch 7ch; gap: 12px; }
+.roster .row > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.roster .row > span:not(:first-child) { text-align: right; }
+.roster .head { color: var(--t-dim); }
+.roster .s-ready > span:last-child { color: var(--t-pick); }
+.roster .s-capped > span:last-child { color: var(--t-clay); }
+.roster .s-no-key { color: var(--t-faint); }
+
+.team { position: relative; display: grid; gap: 0; }
+.team .wires { position: absolute; left: 0; right: 0; top: 64px; width: 100%; height: 150px; overflow: visible; }
+.team .wires path { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.team .lead { justify-self: center; display: grid; justify-items: center; gap: 2px; padding: 14px 22px; border-radius: var(--r-panel); background: var(--fg); color: var(--bg); position: relative; z-index: 1; }
+.team .lead b { font-size: var(--fs-l); font-weight: 600; }
+.team .lead span { font-size: var(--fs-s); opacity: .75; }
+.mates { list-style: none; margin: 150px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.mates li { display: grid; justify-items: center; gap: 4px; padding: 18px 16px; border-radius: var(--r-panel); background: var(--raise); box-shadow: 0 0 0 1px var(--line), var(--shadow); text-align: center; }
+.mates b { font-size: var(--fs-l); font-weight: 600; letter-spacing: -.02em; }
+.mates em { font-style: normal; font-size: var(--fs-s); color: var(--muted); }
+.tasks { margin-top: 28px; max-width: 760px; justify-self: center; width: 100%; }
+.tasks ul { list-style: none; margin: 0; display: grid; gap: 6px; }
+.tasks li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; color: var(--t-fg); }
+.tasks li em { font-style: normal; color: var(--t-dim); font-size: 12px; }
+.tasks .box { color: var(--t-faint); }
+.tasks .done { color: var(--t-dim); }
+.tasks .done .box { color: var(--t-pick); }
+.tasks .doing .box { color: var(--t-clay); }
+.tasks .msg { color: var(--t-head); padding-left: 1.2em; }
+.tasks .msg .box { color: var(--t-head); }
+.team-note { margin-top: 28px; color: var(--muted); max-width: 46rem; }
 
 .start { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; }
 .start .term-body { margin: 0; font-size: 14px; line-height: 2; white-space: pre; }
@@ -207,13 +232,17 @@ footer nav a { padding-block: 10px; }
   .hero, .start { grid-template-columns: minmax(0, 1fr); gap: 36px; }
   .hero { padding-block: 24px 8px; }
   section { padding-block: 64px; }
-  .flow { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  .flow li { grid-template-columns: 28px minmax(0, 1fr); column-gap: 14px; padding: 0; }
-  .flow .dot { grid-row: 1 / 4; margin: 6px 0 0 2px; }
-  .flow li:not(:last-child)::after, .flow li:not(:last-child) .bar { left: 7px; right: auto; top: 26px; bottom: -22px; width: 2px; height: auto; transform-origin: top; }
+    .tasks li { grid-template-columns: 1.4em minmax(0, 1fr); }
+  .tasks li em { grid-column: 2; }
+  .wall { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .team .wires { display: none; }
+  .mates { margin-top: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .mates li { padding: 14px 10px; }
 }
 @media (max-width: 640px) {
-  .term { font-size: 12px; }
+  .roster .row { grid-template-columns: minmax(0, 1fr) 6ch; }
+  .roster .row > span:nth-child(2), .roster .row > span:nth-child(3) { display: none; }
+    .term { font-size: 12px; }
   .term-body { padding: 12px; }
   .picker li { grid-template-columns: 1.2em 1.9em minmax(0, 1fr); }
   .picker li .d { display: none; }
@@ -236,9 +265,9 @@ footer nav a { padding-block: 10px; }
 <div class="wrap">
   <header class="top">
     <a class="brand" href="#" aria-label="byom home">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <circle cx="4" cy="12" r="2.2" fill="currentColor" stroke="none"/>
-        <path d="M6 12h5"/><path d="M11 12c3 0 4-6 8-6"/><path d="M11 12h8"/><path d="M11 12c3 0 4 6 8 6"/>
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4 19.5V11a3.5 3.5 0 0 1 7 0v8.5M11 11a3.5 3.5 0 0 1 7 0v8.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        <circle cx="4" cy="20" r="1.8" fill="currentColor"/><circle cx="11" cy="20" r="1.8" fill="var(--accent)"/><circle cx="18" cy="20" r="1.8" fill="currentColor"/>
       </svg>
       byom
     </a>
@@ -287,24 +316,55 @@ footer nav a { padding-block: 10px; }
       </figure>
     </div>
 
-    <section aria-label="Recording">
-      <figure class="rec">
-        <video id="demo" src="demo.mp4" poster="demo.jpg" width="1240" height="720" muted loop playsinline controls preload="metadata" aria-label="Recording: byom config, a Claude Code session answering on GPT-5.6-Sol, then /model listing Claude and GPT models together"></video>
-        <figcaption>A real session, recorded against local mock servers.</figcaption>
+    <section class="wall" aria-labelledby="wall-h">
+      <div class="wall-head">
+        <h2 id="wall-h">Use the plans you already pay for.</h2>
+        <p>Sixteen providers are built in. Anything that speaks the Anthropic or OpenAI API works too, including the model server on your own machine.</p>
+      </div>
+      <figure class="term roster" translate="no" style="margin:0" aria-label="byom models output">
+        <div class="term-bar"><span>~/myapp</span><span>byom models</span></div>
+<pre class="term-body"><span class="g">$</span> byom models<span class="row head"><span>MODEL</span><span>CONTEXT</span><span>$/M IN/OUT</span><span>STATUS</span></span><span class="row s-ready"><span>openai/gpt-6-astra</span><span>272k</span><span>plan</span><span>ready</span></span><span class="row s-ready"><span>openai/gpt-5.6-sol</span><span>272k</span><span>plan</span><span>ready</span></span><span class="row s-ready"><span>zai/glm-5.3</span><span>200k</span><span>plan</span><span>ready</span></span><span class="row s-ready"><span>kimi/k3</span><span>256k</span><span>plan</span><span>ready</span></span><span class="row s-capped"><span>minimax/MiniMax-M3</span><span>1000k</span><span>plan</span><span>capped</span></span><span class="row s-ready"><span>deepseek/deepseek-v4-pro</span><span>128k</span><span>0.50/2.00</span><span>ready</span></span><span class="row s-ready"><span>gemini/gemini-flash-latest</span><span>1000k</span><span>0.30/2.50</span><span>ready</span></span><span class="row s-ready"><span>groq/llama-3.3-70b-versatile</span><span>128k</span><span>0.59/0.79</span><span>ready</span></span><span class="row s-ready"><span>openrouter/qwen/qwen3-coder</span><span>262k</span><span>0.22/0.95</span><span>ready</span></span><span class="row s-no-key"><span>mistral/devstral-latest</span><span>128k</span><span>-</span><span>no-key</span></span><span class="row s-ready"><span>ollama/qwen3-coder</span><span>32k</span><span>local</span><span>ready</span></span><span class="row s-ready"><span>claude-opus-5-5</span><span>1000k</span><span>plan</span><span>ready</span></span></pre>
       </figure>
     </section>
 
-    <section aria-labelledby="delegate-h">
+    <section aria-label="Recording">
+      <figure class="rec">
+        <video id="demo" src="demo.mp4" poster="demo.jpg" width="1240" height="720" muted loop playsinline controls preload="metadata" aria-label="Recording: byom config, a Claude Code session answering on GPT-5.6-Sol, then /model listing Claude and GPT models together"></video>
+        <figcaption>Claude Code running through byom. The model servers in this recording are local mocks.</figcaption>
+      </figure>
+    </section>
+
+    <section aria-labelledby="team-h">
       <div class="flow-head">
-        <h2 id="delegate-h">Claude can ask GPT for a second opinion.</h2>
-        <p>Every model is also a subagent. Claude picks one when it helps.</p>
+        <h2 id="team-h">Put a team of models on one task.</h2>
+        <p>Claude leads. GPT reviews while GLM writes the fix and Kimi writes the tests, each on its own plan, and they message each other as they go.</p>
       </div>
-      <ol class="flow" id="flow">
-        <li><span class="dot"></span><b>Opus</b><span>reviews your diff</span><i class="bar"></i></li>
-        <li><span class="dot"></span><b>Agent</b><code translate="no">byom:openai-gpt-5-6-sol</code><i class="bar"></i></li>
-        <li><span class="dot"></span><b>GPT-5.6-Sol</b><span>on your ChatGPT plan</span><i class="bar"></i></li>
-        <li><span class="dot"></span><b>One issue</b><span><code translate="no">release()</code> returns the socket before it is reset</span></li>
-      </ol>
+      <div class="team" id="team">
+        <svg class="wires" viewBox="0 0 1000 150" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M500 0 C500 70 125 60 125 150" pathLength="1"/>
+          <path d="M500 0 C500 70 375 70 375 150" pathLength="1"/>
+          <path d="M500 0 C500 70 625 70 625 150" pathLength="1"/>
+          <path d="M500 0 C500 70 875 60 875 150" pathLength="1"/>
+        </svg>
+        <div class="lead"><b>Claude</b><span>lead, splits the work</span></div>
+        <ul class="mates">
+          <li><b>GPT-5.6-Sol</b><span>reviews the diff</span><em>ChatGPT plan</em></li>
+          <li><b>GLM-5.3</b><span>implements the fix</span><em>Z.ai</em></li>
+          <li><b>Kimi K3</b><span>writes the tests</span><em>Kimi</em></li>
+          <li><b>qwen3-coder</b><span>scans the logs</span><em>Ollama, local</em></li>
+        </ul>
+        <div class="tasks term" translate="no" aria-label="Shared task list">
+          <div class="term-bar"><span>Tasks</span><span>shared by the team</span></div>
+          <ul class="term-body">
+            <li class="done"><span class="box">✓</span>Review the diff in src/pool.rs<em>GPT-5.6-Sol</em></li>
+            <li class="msg"><span class="box">↳</span>GPT-5.6-Sol → GLM-5.3: release() returns the socket before reset<em>message</em></li>
+            <li class="doing"><span class="box">●</span>Reset before returning the connection<em>GLM-5.3</em></li>
+            <li><span class="box">○</span>Test concurrent release<em>Kimi K3</em></li>
+            <li class="done"><span class="box">✓</span>Scan logs for double-release errors<em>qwen3-coder</em></li>
+          </ul>
+        </div>
+      </div>
+      <p class="team-note">This runs on Claude Code's agent teams, which are still experimental. Turn them on with <code>byom config set teams true</code>. Without teams, Claude can still hand one task at a time to any model as a subagent.</p>
     </section>
 
     <section aria-labelledby="start-h">
@@ -320,7 +380,7 @@ footer nav a { padding-block: 10px; }
   </main>
 
   <footer>
-    <p>Independent project, not affiliated with Anthropic or OpenAI. Claude models through your Claude plan are opt-in: <code>byom config set relay true</code>, after reading <a href="https://github.com/baoengineer/byom#claude-models">Claude models</a>. MIT licensed, for macOS and Linux.</p>
+    <p>Independent project, not affiliated with Anthropic or OpenAI. Using Claude through your Claude plan is opt-in. Read <a href="https://github.com/baoengineer/byom#claude-models">Claude models</a> first, then run <code>byom config set relay true</code>. MIT licensed, for macOS and Linux.</p>
     <nav aria-label="Project"><a href="https://github.com/baoengineer/byom">GitHub</a><a href="https://github.com/baoengineer/byom/releases">Releases</a><a href="https://github.com/baoengineer/byom/blob/main/docs/ARCHITECTURE.md">Architecture</a></nav>
   </footer>
 </div>
@@ -474,7 +534,7 @@ footer nav a { padding-block: 10px; }
   });
 
   const video = $("demo");
-  const flow = [...document.querySelectorAll(".flow .bar")];
+  const wires = [...document.querySelectorAll(".team .wires path")];
   if ("IntersectionObserver" in window) {
     const seen = new IntersectionObserver((entries) => {
       for (const entry of entries) {
@@ -482,13 +542,13 @@ footer nav a { padding-block: 10px; }
           if (entry.isIntersecting && !reduced) video.play().catch(() => {});
           else if (!entry.isIntersecting) video.pause();
         } else if (entry.isIntersecting) {
-          draw(flow, 260, matchMedia("(max-width: 980px)").matches ? "y" : "x");
+          if (!reduced) wires.forEach((w, i) => w.animate([{ strokeDasharray: "1", strokeDashoffset: 1 }, { strokeDasharray: "1", strokeDashoffset: 0 }], { duration: 900, delay: i * 120, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "backwards" }));
           seen.unobserve(entry.target);
         }
       }
     }, { threshold: 0.4 });
     seen.observe(video);
-    seen.observe($("flow"));
+    seen.observe($("team"));
   }
 
   set(HOME, true);

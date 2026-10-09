@@ -457,7 +457,9 @@ pub fn plan(
         })
         .collect();
     let settings = serde_json::json!({
-        "modelPicker": {"replaceBuiltInOptions": !claude, "options": options}
+        "modelPicker": {"replaceBuiltInOptions": !claude, "options": options},
+        // Teammates in their own panes do not inherit the bridge key header.
+        "teammateMode": "in-process"
     });
     Ok(Plan {
         claude,
@@ -552,6 +554,9 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         .env("ANTHROPIC_CUSTOM_HEADERS", headers)
         // Tool search defers tool definitions that non-Claude models never receive.
         .env("ENABLE_TOOL_SEARCH", "false");
+    if config.teams {
+        command.env("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS", "1");
+    }
     if !relay {
         command
             .env("ANTHROPIC_AUTH_TOKEN", &key)

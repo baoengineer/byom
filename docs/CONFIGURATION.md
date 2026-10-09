@@ -25,6 +25,7 @@ Settings live in `~/.byom/config.json` (or `$BYOM_HOME/config.json`). Edit them 
 | `providers.<id>` | `name`, `api_key`, `base_url`, `protocol` (`anthropic` or `openai-chat`), `models`, `disabled` |
 | `context_tokens` | Compaction window for the main model; `0` uses the catalog value for non-Claude models and Claude Code's own for Claude |
 | `transport` | ChatGPT plan transport: `auto` (WebSocket) or `http` |
+| `teams` | Turn on Claude Code's agent teams, so teammates can run on any model (default `false`) |
 | `behaves_as` | Claude model whose handling Claude Code applies to other models (default `claude-opus-5-5`) |
 
 ## Credentials
