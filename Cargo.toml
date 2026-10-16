@@ -14,22 +14,22 @@ exclude = [".github/", "tests/e2e/", "docs/demo/", "site/"]
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
-sha2 = "0.10"
+base64 = "0.23"
+sha2 = "0.11"
 fs2 = "0.4"
-jsonwebtoken = { version = "10.3", default-features = false, features = ["use_pem", "rust_crypto"] }
+jsonwebtoken = { version = "11.1", default-features = false, features = ["use_pem", "rust_crypto"] }
 uuid = { version = "1", features = ["v4"] }
 axum = "0.8"
 bytes = "1"
 clap = { version = "4", features = ["derive"] }
 futures-util = { version = "0.3", features = ["sink"] }
-rand = "0.9"
+rand = "0.10"
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
-tokio-tungstenite = { version = "0.27", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 ratatui = { version = "0.30", default-features = false, features = ["crossterm_0_29", "layout-cache"] }
 rpassword = "7.5.4"
 
