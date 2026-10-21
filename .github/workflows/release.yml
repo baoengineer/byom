@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Release notes from CHANGELOG.md
         run: awk -v v="${GITHUB_REF_NAME#v}" '/^## /{p=($2==v); next} p' CHANGELOG.md > notes.md
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           merge-multiple: true
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
