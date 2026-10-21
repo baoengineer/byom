@@ -48,7 +48,7 @@ jobs:
           cp target/${{ matrix.target }}/release/byom README.md LICENSE "$name"/
           tar -czf "$name.tar.gz" "$name"
           shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.target }}
           path: byom-*.tar.gz*
