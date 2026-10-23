@@ -559,6 +559,14 @@ pub async fn run(model: Option<String>, args: Vec<String>) -> Result<()> {
         _ => bridge_header,
     };
     let plugin = crate::skill::prepare(&plan.rows)?;
+    // A resumed session can override ANTHROPIC_MODEL, but not an explicit --model.
+    let explicit_model = args
+        .iter()
+        .take_while(|arg| arg.as_str() != "--")
+        .any(|arg| arg == "--model" || arg.starts_with("--model="));
+    if !explicit_model && let Some(model) = &plan.model {
+        command.arg("--model").arg(model);
+    }
     command
         .arg("--settings")
         .arg(plan.settings.to_string())

@@ -218,9 +218,55 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
             );
         }
     }
+    for (args, expected) in [
+        (vec!["run"], "openai/configured-model"),
+        (vec!["--resume", "saved-session"], "openai/configured-model"),
+        (vec!["run", "--", "--continue"], "openai/configured-model"),
+        (
+            vec!["run", "chosen-model", "--resume", "saved-session"],
+            "openai/chosen-model",
+        ),
+        (
+            vec!["--resume", "saved-session", "--model", "explicit-model"],
+            "explicit-model",
+        ),
+        (
+            vec!["--continue", "--model=explicit-model"],
+            "explicit-model",
+        ),
+        (
+            vec!["run", "--", "--", "--", "--model=prompt-text"],
+            "openai/configured-model",
+        ),
+    ] {
+        let output = command(&home, &bin).args(&args).output().unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let child_args: Vec<_> = stdout
+            .lines()
+            .filter_map(|line| line.strip_prefix("arg=<").and_then(|s| s.strip_suffix('>')))
+            .collect();
+        let options: Vec<_> = child_args
+            .iter()
+            .copied()
+            .take_while(|arg| *arg != "--")
+            .collect();
+        let models: Vec<_> = options
+            .iter()
+            .enumerate()
+            .filter_map(|(i, arg)| {
+                if *arg == "--model" {
+                    Some(options[i + 1])
+                } else {
+                    arg.strip_prefix("--model=")
+                }
+            })
+            .collect();
+        assert_eq!(models, vec![expected], "{args:?}: {stdout}");
+    }
     // Signed in to Claude: Claude Code keeps its credential and Claude defaults.
     let relay = command(&home, &bin)
-        .args(["run", "--", "--print", "x"])
+        .args(["run", "--", "--resume", "saved-session", "--print", "x"])
         .env("FAKE_CLAUDE_SIGNED_IN", "true")
         .env("ANTHROPIC_API_KEY", "user-anthropic-key")
         .env("CLAUDE_CODE_USE_BEDROCK", "1")
@@ -253,6 +299,17 @@ printf 'base=%s\ntoken=%s\nmodel=%s\nopus=%s\nsonnet=%s\nhaiku=%s\ntraffic=%s\na
         String::from_utf8_lossy(&relay.stderr).contains("relay"),
         "first relay run explains the relay"
     );
+
+    fs::write(home.join("config.json"), r#"{"relay":true}"#).unwrap();
+    let native = command(&home, &bin)
+        .args(["--resume", "saved-session"])
+        .env("FAKE_CLAUDE_SIGNED_IN", "true")
+        .output()
+        .unwrap();
+    assert!(native.status.success(), "{native:?}");
+    let stdout = String::from_utf8_lossy(&native.stdout);
+    assert!(!stdout.contains("arg=<--model"), "{stdout}");
+    assert!(stdout.lines().any(|line| line == "model="), "{stdout}");
 
     let wrong_home = temp.path().join("wrong-state");
     fs::create_dir(&wrong_home).unwrap();
